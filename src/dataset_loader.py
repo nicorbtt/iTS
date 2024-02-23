@@ -30,14 +30,14 @@ def dataset_stats(name):
                           'Auto' : 6, 
                           'RAF' : 12, 
                           'carparts': 6, 
-                          'syph' : 6, 
+                          'syph' : 8, 
                           'M5' : 28}
     
     freq = {'OnlineRetail': '1D',
             'Auto' : '1M',
             'RAF' : '1M',
             'carparts': '1M',
-            'syph' : '1M', 
+            'syph' : '1W', 
             'M5' : '1D'}
     
     start = {'OnlineRetail': '2010-12-01',

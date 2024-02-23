@@ -11,6 +11,7 @@ from gluonts.itertools import Cyclic, Cached
 from gluonts.dataset.loader import as_stacked_batches
 from gluonts.transform.sampler import InstanceSampler
 from gluonts.dataset.field_names import FieldName
+from gluonts.time_feature import get_lags_for_frequency, time_features_from_frequency_str
 from gluonts.transform import (
     AddAgeFeature,
     AddObservedValuesIndicator,
@@ -54,8 +55,6 @@ def transform_start_field(batch, freq):
 
 train_dataset.set_transform(partial(transform_start_field, freq=freq))
 test_dataset.set_transform(partial(transform_start_field, freq=freq))
-
-from gluonts.time_feature import get_lags_for_frequency, time_features_from_frequency_str
 
 
 time_features = time_features_from_frequency_str(freq)

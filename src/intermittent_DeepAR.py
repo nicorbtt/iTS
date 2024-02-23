@@ -5,10 +5,10 @@ import torch
 from torch.optim import AdamW
 
 import gluonts
-from gluonts.torch.model.deepar.estimator import DeepAREstimator
 from gluonts.torch.model.deepar.module import DeepARModel
+from gluonts.torch.scaler import MASEScaler, MeanDemandScaler
+from gluonts.torch.distributions import PoissonOutput, NegativeBinomialOutput, StudentTOutput, TweedieOutput, FixedDispersionTweedieOutput
 
-from intermittent_transformers import TweedieOutput, PoissonOutput
 
 model = DeepARModel(
     freq = '1M',
@@ -21,7 +21,7 @@ model = DeepARModel(
     num_feat_static_cat=1,
     cardinality=[len(train_dataset)],
     embedding_dimension=[2],
-    scaling=False,
+    scaling='mean demand',
 
     num_parallel_samples=100
 )
@@ -66,7 +66,7 @@ for batch in tqdm(test_dataloader):
         past_target = batch['past_values'],
         past_observed_values = batch['past_observed_mask'],
         future_time_feat = batch['future_time_features'],
-        num_parallel_samples = 1000
+        num_parallel_samples = 100
         )
     forecasts.append(pred.detach().numpy())
 
