@@ -72,8 +72,8 @@ class ModelConfigBuilder:
                 'scaling' : {
                         'MASE' : 'MASE',
                         'mean' : 'mean',
-                        'mean-demand' : 'mean demand'
-                    }[self.scaling] if self.scaling else None,
+                        'mean-demand' : 'mean demand',
+                    }[self.scaling] if self.scaling else False,
                 'default_scale' : None,
                 'num_parallel_samples' : _check('num_parallel_samples', 100)
             }
