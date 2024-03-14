@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from gluonts.torch.model.deepar.module import DeepARModel
 from gluonts.time_feature import (
@@ -17,87 +18,104 @@ from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerForPr
 
 
 ### Configuration dictionary
-class ModelConfig(TimeSeriesTransformerConfig):
-    def __init__(self, datasets, data_info, model, **kwargs) -> None:
+class ModelConfigBuilder:
+    
+    def __init__(self, model, distribution_head, scaling):
         assert model in ["deepAR", "transformer"]
-
-        lags_sequence = get_lags_for_frequency(data_info['freq'] if data_info['freq'] != "M" else "ME") if not 'lag_sequence' in kwargs else None
-        time_features = time_features_from_frequency_str(data_info['freq'] if data_info['freq'] != "M" else "ME")
-
-        self.model=model
-        self.freq=data_info['freq']
-
-        super().__init__(
-            prediction_length=data_info['h'],
-            context_length=data_info['h']*2,
-            loss="nll",
-            input_size=1,
-            num_time_features=len(time_features)+1,
-            num_dynamic_real_features=0,
-            num_static_categorical_features=1,
-            num_static_real_features=0,
-            cardinality=[len(datasets['train'])],
-            embedding_dimension=[3],
-            lags_sequence=lags_sequence,
-
-            # transformer params
-            d_model=32,                      
-            encoder_layers=4,                      
-            decoder_layers=4,             
-            encoder_attention_heads=2,             
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,                 
-            decoder_ffn_dim=32, 
-            activation_function="gelu",
-            dropout=0.1,
-            encoder_layerdrop=0.1,  
-            decoder_layerdrop=0.1,      
-            attention_dropout=0.1,
-            activation_dropout=0.1,
-            num_parallel_samples=100,
-            init_std=0.02,
-            use_cache=True,
-
-            **kwargs  
-        )
-        
-    
-    def __str__(self):
-        return "<ModelConfig class>"
-    
-    ### Create Model
-    def build_model(self, distribution_head, scaling):
         assert distribution_head in ["poisson","negative_binomial", "tweedie", "tweedie-fix"]
+        assert scaling in ["mase", "mean", "mean-demand", None]
+        self.model = model
+        self.distribution_head = distribution_head
+        self.scaling = scaling
 
+    def build(self, data_info, **kwargs) -> None:
+        def __check__(key, default_value):
+            return kwargs[key] if key in kwargs else default_value
+        
+        lags_sequence = get_lags_for_frequency(data_info['freq'] if data_info['freq'] != "M" else "ME") if not 'lag_sequence' in kwargs else []
+        self.time_features = time_features_from_frequency_str(data_info['freq'] if data_info['freq'] != "M" else "ME") if not 'time_features' in kwargs else []
+        
         if self.model == "deepAR":
-            if distribution_head == "poisson": self.distribution_output = PoissonOutput()
-            if distribution_head == "negative_binomial": self.distribution_output = NegativeBinomialOutput()
-            if distribution_head == "tweedie": self.distribution_output = TweedieOutput()
-            if distribution_head == "tweedie-fix": self.distribution_output = FixedDispersionTweedieOutput()
-        if self.model == "transformer":
-            if distribution_head == "poisson": self.distribution_output = "poisson"
-            if distribution_head == "negative_binomial": self.distribution_output = "negative_binomial"
-            if distribution_head == "tweedie": self.distribution_output = "tweedie"
-            if distribution_head == "tweedie-fix": self.distribution_output = 'fixed dispersion tweedie'
+            self.params = {
+                'freq' : data_info['freq'],
+                'context_length' : __check__('context_length', data_info['h']*2),
+                'prediction_length' : __check__('prediction_length', data_info['h']),
+                'num_feat_dynamic_real' : 0,
+                'num_feat_static_real' : 0,
+                'num_feat_static_cat' : 1,
+                'cardinality' : [data_info['N']],
+                'embedding_dimension' : [__check__('embedding_dimension', 3)],
+                'num_layers' : __check__('num_layers', 2),
+                'hidden_size' : __check__('hidden_size', 40),
+                'dropout_rate' : __check__('dropout_rate', 0.1),
+                'distr_output' : {
+                        'poisson' : PoissonOutput(),
+                        'negative_binomial' : NegativeBinomialOutput(),
+                        'tweedie' : TweedieOutput(),
+                        'tweedie-fix' : FixedDispersionTweedieOutput()
+                    }[self.distribution_head],
+                'lags_seq' : lags_sequence,
+                'scaling' : {
+                        'MASE' : 'MASE',
+                        'mean' : 'mean',
+                        'mean-demand' : 'mean demand'
+                    }[self.scaling] if self.scaling else None,
+                'default_scale' : None,
+                'num_parallel_samples' : __check__('num_parallel_samples', 100)
+            }
 
-        # TODO scaling
-        # ...
-
-        if self.model == "deepAR":
-            return DeepARModel(
-                        freq = self.freq,
-                        prediction_length = self.prediction_length,
-                        context_length = 2 * self.prediction_length,
-                        distr_output = self.distribution_output,
-                        lags_seq = self.lags_sequence,
-                        num_feat_dynamic_real = self.num_dynamic_real_features + self.num_time_features,
-                        num_feat_static_cat = self.num_static_categorical_features,
-                        cardinality = self.cardinality,
-                        embedding_dimension = self.embedding_dimension,
-                        scaling = self.scaling,
-                        num_parallel_samples = self.num_parallel_samples)
         if self.model == "transformer":
-            return TimeSeriesTransformerForPrediction(self)
+            self.params = TimeSeriesTransformerConfig(
+                prediction_length = __check__('prediction_length', data_info['h']),
+                context_length = __check__('context_length', data_info['h']*2),
+                distribution_output = {
+                        'poisson' : 'poisson',
+                        'negative_binomial' : 'negative_binomial',
+                        'tweedie' : 'tweedie',
+                        'tweedie-fix' : 'fixed dispersion tweedie'
+                    }[self.distribution_head],
+                loss = "nll",
+                input_size = 1,
+                scaling = {
+                        'MASE' : 'MASE',
+                        'mean' : 'mean',
+                        'mean-demand' : 'mean demand'
+                    }[self.scaling] if self.scaling else None,
+                lags_sequence = lags_sequence,
+                num_time_features = len(self.time_features) + 1,  # +1 is Age
+                num_dynamic_real_features = 0,
+                num_static_categorical_features = 1,
+                num_static_real_features = 0,
+                cardinality = [data_info['N']],
+                embedding_dimension = [__check__('embedding_dimension', 3)],
+                
+                # architecture params
+                d_model = __check__('d_model', 32),                                    # Dimensionality of the transformer layers                   
+                encoder_layers = __check__('encoder_layers', 4),                       # Number of encoder layers              
+                decoder_layers = __check__('decoder_layers', 4),                       # Number of decoder layers                                          
+                encoder_attention_heads = __check__('encoder_attention_heads', 2),     # Number of attention heads for each attention layer in the Transformer encoder         
+                decoder_attention_heads = __check__('decoder_attention_heads', 2),     # Number of attention heads for each attention layer in the Transformer decoder   
+                encoder_ffn_dim = __check__('encoder_ffn_dim', 32),                    # Dimension of the “intermediate” (often named feed-forward) layer in encoder                
+                decoder_ffn_dim = __check__('decoder_ffn_dim', 32),                    # Dimension of the “intermediate” (often named feed-forward) layer in decoder 
+                activation_function = __check__('activation_function', "gelu"),        # The non-linear activation function (function or string) in the encoder and decoder
+                dropout = __check__('dropout', 0.1),                                   # The dropout probability for all fully connected layers in the encoder, and decoder
+                encoder_layerdrop = __check__('encoder_layerdrop', 0.1),               # The dropout probability for the attention and fully connected layers for each encoder layer  
+                decoder_layerdrop = __check__('decoder_layerdrop', 0.1),               # The dropout probability for the attention and fully connected layers for each decoder layer
+                attention_dropout = __check__('attention_dropout', 0.1),               # The dropout probability for the attention probabilities
+                activation_dropout = __check__('activation_dropout', 0.1),             # The dropout probability used between the two layers of the feed-forward networks
+                num_parallel_samples = __check__('num_parallel_samples', 100),         # The number of samples to generate in parallel for each time step of inference
+                init_std = __check__('init_std', 0.02),                                # The standard deviation of the truncated normal weight initialization distribution
+                use_cache = __check__('use_cache', True),                              # Whether to use the past key/values attentions (if applicable to the model) to speed up decoding
+            )
+
+    ### Create Model
+    def get_model(self):
+        if self.model == "deepAR" : 
+            tmp = self.params['num_feat_dynamic_real'] + len(self.time_features) + 1
+            return(DeepARModel(**({**self.params, 'num_feat_dynamic_real': tmp, 'num_feat_static_real':1})))
+        if self.model == "transformer" : 
+            return(TimeSeriesTransformerForPrediction(self.params))
+
 
 ### Forward step
 def forward(model, batch, device, config):
@@ -146,6 +164,30 @@ def predict(model, batch, device, config):
             past_target = batch['past_values'].to(device),
             future_time_feat = batch['future_time_features'].to(device),
             past_observed_values = batch['past_observed_mask'].to(device),
-            num_parallel_samples = config.num_parallel_samples
+            num_parallel_samples = config['num_parallel_samples']
         ).detach().numpy()
+    # TODO rounding
     return(predictions)
+
+class EarlyStop():
+    def __init__(self, logger, patience=20, min_delta = 0.001) -> None:
+        self.best_val_loss = np.inf
+        self.best_model = None
+        self.current_patience = 0
+        self.logger = logger
+        self.patience = patience
+        self.min_delta = min_delta
+
+    def update(self, model, epoch, new_val_loss):
+        if new_val_loss < self.best_val_loss - self.min_delta:
+            self.best_val_loss = new_val_loss
+            self.best_model = model.state_dict()
+            self.logger.log_earlystop_newbest(self.best_val_loss)
+            self.current_patience = 0
+        else:
+            self.current_patience = self.current_patience + 1
+            if self.current_patience == self.patience:
+                self.logger.log_earlystop_stop(epoch, self.best_val_loss)
+                return True
+        return False
+

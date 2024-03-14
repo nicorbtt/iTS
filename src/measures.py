@@ -80,7 +80,8 @@ def dataset_stats(data, to_pandas = True):
         return stats
 
 ### Metrics
-def compute_drps(actual, samples, lower =None, upper = None):
+# Discrete RPS
+def drps(actual, samples, lower=None, upper=None):
     assert len(actual) == len(samples)
     if lower is None:
         lower = int(np.floor(np.nanmin([np.min(samples), np.min(actual)])))
@@ -89,9 +90,25 @@ def compute_drps(actual, samples, lower =None, upper = None):
     return np.array([np.sum((ecdf(samples[i]).cdf.evaluate(np.arange(lower, upper+1)) - 
                             (np.arange(lower, upper+1) >= actual[i]).astype(float))**2)
                              for i in range(len(actual))])
-def compute_pinball(actual, pred, l):
+
+# Pinball loss (e.g., l=0.95)
+def pinball(actual, pred, l):
     return np.abs(actual-pred)*np.where(actual >= pred, l, 1-l)
-def compute_mase(actual, pred, in_sample_data):
+
+# Quantile loss
+def quantile_loss_(target: np.ndarray, forecast: np.ndarray, q: float) -> float:
+    return 2 * np.sum(np.abs((forecast - target) * ((target <= forecast) - q)))
+
+def quantile_loss(target: np.ndarray, forecast: np.ndarray, q = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99]):
+    res = {}
+    for q_ in q:
+        res['q'+str(q_)] = [quantile_loss_(t, f, q_) for (t, f) in zip(target, forecast)] 
+    return(pd.DataFrame(res))
+
+# Mase
+def mase(actual, pred, in_sample_data):
     return np.mean(np.abs(actual - pred), axis=1)/np.mean(np.abs(in_sample_data[:,1:] - in_sample_data[:,:-1]), axis=1)
-def compute_pis(actual, pred):
+
+# Proportion in stock
+def pis(actual, pred):
     return -np.sum(np.cumsum(actual - pred, axis=1), axis=1)

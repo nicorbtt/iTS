@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 
 # Plot learning curves
-def learning_curves(history, figsize=(8, 4)):
+def learning_curves(history, path, figsize=(10, 6)):
     plt.figure(figsize=figsize)
     epoch = len(history['train_loss'])
     plt.plot(range(epoch), history['train_loss'], label='train')
@@ -13,7 +13,9 @@ def learning_curves(history, figsize=(8, 4)):
     plt.ylabel('Loss')
     plt.title('Learning curves')
     plt.legend()
-    plt.show()
+    plt.tight_layout() 
+    plt.savefig(path+"/learning_curves.png")
+    plt.close()
 
 # Plot forecast
 def forecast_plot(ts_index, forecasts, datasets, data_info, targetName, alphas=[0.05], legend_loc="upper left", figsize=(8,4)):
@@ -33,3 +35,19 @@ def forecast_plot(ts_index, forecasts, datasets, data_info, targetName, alphas=[
         )
     ax.legend(loc=legend_loc)
     plt.show()
+
+import logging
+logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO, datefmt='%d-%b-%y %H:%M:%S')
+
+class Logger():
+    def log(self, s):
+        logging.info(s)
+
+    def log_epoch(self, epoch, history):
+        logging.info(f"Epoch {epoch+1} \t Train Loss: {history['train_loss'][-1]:.3f} \t Val Loss: {history['val_loss'][-1]:.3f}")
+    
+    def log_earlystop_newbest(self, best_val_loss):
+        logging.info(f"Early stopping, new validation best: {best_val_loss:.3f}, keep training!")
+
+    def log_earlystop_stop(self, epoch, best_val_loss):
+        logging.info(f"Early stopping after {epoch+1} epochs. Validation best: {best_val_loss:.3f}")

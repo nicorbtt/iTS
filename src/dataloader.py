@@ -102,11 +102,11 @@ def create_datasets(data, data_info, na_rm = True):
 ### Transformations Chain
 def create_transformation(freq: str, config: PretrainedConfig) -> Transformation:
     remove_field_names = []
-    if config.num_static_real_features == 0:
+    if config['num_static_real_features'] == 0:
         remove_field_names.append(FieldName.FEAT_STATIC_REAL)
-    if config.num_dynamic_real_features == 0:
+    if config['num_dynamic_real_features'] == 0:
         remove_field_names.append(FieldName.FEAT_DYNAMIC_REAL)
-    if config.num_static_categorical_features == 0:
+    if config['num_static_categorical_features'] == 0:
         remove_field_names.append(FieldName.FEAT_STATIC_CAT)
 
     if freq =="M":
@@ -124,7 +124,7 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                     dtype=int,
                 )
             ]
-            if config.num_static_categorical_features > 0
+            if config['num_static_categorical_features'] > 0
             else []
         )
         + (
@@ -134,14 +134,14 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                     expected_ndim=1,
                 )
             ]
-            if config.num_static_real_features > 0
+            if config['num_static_real_features'] > 0
             else []
         )
         + [
             AsNumpyArray(
                 field=FieldName.TARGET,
-                # we expect an extra dim for the multivariate case:
-                expected_ndim=1 if config.input_size == 1 else 2,
+                # n.b. we expect an extra dim for the multivariate case!
+                expected_ndim=1,
             ),
             # step 3: handle the NaN's by filling in the target with zero
             # and return the mask (which is in the observed values)
@@ -160,7 +160,7 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                 target_field=FieldName.TARGET,
                 output_field=FieldName.FEAT_TIME,
                 time_features=time_features_from_frequency_str(freq),
-                pred_length=config.prediction_length,
+                pred_length=config["prediction_length"],
             ),
             # step 5: add another temporal feature (just a single number)
             # tells the model where in its life the value of the time series is,
@@ -168,7 +168,7 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
             AddAgeFeature(
                 target_field=FieldName.TARGET,
                 output_field=FieldName.FEAT_AGE,
-                pred_length=config.prediction_length,
+                pred_length=config["prediction_length"],
                 log_scale=True,
             ),
             # step 6: vertically stack all the temporal features into the key FEAT_TIME
@@ -177,7 +177,7 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                 input_fields=[FieldName.FEAT_TIME, FieldName.FEAT_AGE]
                 + (
                     [FieldName.FEAT_DYNAMIC_REAL]
-                    if config.num_dynamic_real_features > 0
+                    if config['num_dynamic_real_features'] > 0
                     else []
                 ),
             ),
@@ -206,10 +206,10 @@ def create_instance_splitter(
     instance_sampler = {
         "train": train_sampler
         or ExpectedNumInstanceSampler(
-            num_instances=1.0, min_future=config.prediction_length
+            num_instances=1.0, min_future=config["prediction_length"]
         ),
         "validation": validation_sampler
-        or ValidationSplitSampler(min_future=config.prediction_length),
+        or ValidationSplitSampler(min_future=config["prediction_length"]),
         "test": TestSplitSampler(),
     }[mode]
 
@@ -219,8 +219,8 @@ def create_instance_splitter(
         start_field=FieldName.START,
         forecast_start_field=FieldName.FORECAST_START,
         instance_sampler=instance_sampler,
-        past_length=config.context_length + max(config.lags_sequence),
-        future_length=config.prediction_length,
+        past_length=config['context_length'] + max(config['lags_sequence']),
+        future_length=config["prediction_length"],
         time_series_fields=["time_features", "observed_mask"],
     )
 
@@ -241,10 +241,10 @@ def create_train_dataloader(
         "past_observed_mask",
         "future_time_features",
     ]
-    if config.num_static_categorical_features > 0:
+    if config['num_static_categorical_features'] > 0:
         PREDICTION_INPUT_NAMES.append("static_categorical_features")
 
-    if config.num_static_real_features > 0:
+    if config['num_static_real_features'] > 0:
         PREDICTION_INPUT_NAMES.append("static_real_features")
 
     TRAINING_INPUT_NAMES = PREDICTION_INPUT_NAMES + [
@@ -287,10 +287,10 @@ def create_backtest_dataloader(
         "past_observed_mask",
         "future_time_features",
     ] + ["future_values", "future_observed_mask"]
-    if config.num_static_categorical_features > 0:
+    if config['num_static_categorical_features'] > 0:
         PREDICTION_INPUT_NAMES.append("static_categorical_features")
 
-    if config.num_static_real_features > 0:
+    if config['num_static_real_features'] > 0:
         PREDICTION_INPUT_NAMES.append("static_real_features")
 
     transformation = create_transformation(freq, config)
@@ -322,10 +322,10 @@ def create_test_dataloader(
         "past_observed_mask",
         "future_time_features",
     ]
-    if config.num_static_categorical_features > 0:
+    if config['num_static_categorical_features'] > 0:
         PREDICTION_INPUT_NAMES.append("static_categorical_features")
 
-    if config.num_static_real_features > 0:
+    if config['num_static_real_features'] > 0:
         PREDICTION_INPUT_NAMES.append("static_real_features")
 
     transformation = create_transformation(freq, config)
@@ -345,6 +345,19 @@ def create_test_dataloader(
         field_names=PREDICTION_INPUT_NAMES,
     )
 def create_dataloaders(config, datasets, data_info, batch_size=128, num_batches_per_epoch=100):
+
+    # hack ;)
+    if not isinstance(config, PretrainedConfig):
+        config = {
+            {
+                'num_feat_static_cat' : 'num_static_categorical_features',
+                'num_feat_static_real' : 'num_static_real_features',
+                'num_feat_dynamic_real' : 'num_dynamic_real_features',
+                'lags_seq' : 'lags_sequence'
+            }.get(k, k): v for k, v in config.items()}
+    else:
+        config = config.__dict__
+    
     train_dataloader = create_train_dataloader(config=config, 
                                                freq=data_info['freq'], 
                                                data=datasets['train'], 
