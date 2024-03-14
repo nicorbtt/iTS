@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -49,7 +50,7 @@ DATASETS_METADATA = {
 ### Import raw data from disk
 def load_raw(dataset_name, datasets_folder_path):
     assert dataset_name in ["OnlineRetail", "Auto", 'RAF', 'carparts', 'syph', 'M5']
-    data_raw = pd.read_csv(datasets_folder_path + "/" + dataset_name + "/data.csv")
+    data_raw = pd.read_csv(os.path.join(datasets_folder_path, dataset_name, "data.csv"))
     data_info = {
         'h' : DATASETS_METADATA[dataset_name]['h'],
         'freq' : DATASETS_METADATA[dataset_name]['freq'],
@@ -97,6 +98,8 @@ def create_datasets(data, data_info, na_rm = True):
     dataset['train'].set_transform(partial(transform_start_field, freq=data_info['freq']))
     dataset['valid'].set_transform(partial(transform_start_field, freq=data_info['freq']))
     dataset['test'].set_transform(partial(transform_start_field, freq=data_info['freq']))
+
+    data_info['N'] = len(dataset['train'])
     return(dataset)
 
 ### Transformations Chain

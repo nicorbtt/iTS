@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -14,7 +15,7 @@ def learning_curves(history, path, figsize=(10, 6)):
     plt.title('Learning curves')
     plt.legend()
     plt.tight_layout() 
-    plt.savefig(path+"/learning_curves.png")
+    plt.savefig(os.path.join(path, "learning_curves.png"))
     plt.close()
 
 # Plot forecast

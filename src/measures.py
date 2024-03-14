@@ -103,7 +103,7 @@ def quantile_loss(target: np.ndarray, forecast: np.ndarray, q = [0.25, 0.5, 0.8,
     res = {}
     for q_ in q:
         res['q'+str(q_)] = [quantile_loss_(t, f, q_) for (t, f) in zip(target, forecast)] 
-    return(pd.DataFrame(res))
+    return(res)
 
 # Mase
 def mase(actual, pred, in_sample_data):
