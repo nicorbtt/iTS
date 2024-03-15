@@ -64,7 +64,7 @@ class ModelConfigBuilder:
                 'dropout_rate' : _check('dropout_rate', 0.1),
                 'distr_output' : {
                         'poisson' : PoissonOutput(),
-                        'negbinom' : NegativeBinomialOutput(),
+                        'negbin' : NegativeBinomialOutput(),
                         'tweedie' : TweedieOutput(),
                         'tweedie-fix' : FixedDispersionTweedieOutput()
                     }[self.distribution_head],
@@ -86,7 +86,7 @@ class ModelConfigBuilder:
                 context_length = _check('context_length', data_info['h']*2),
                 distribution_output = {
                         'poisson' : 'poisson',
-                        'negbinom' : 'negative_binomial',
+                        'negbin' : 'negative_binomial',
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed dispersion tweedie'
                     }[self.distribution_head],

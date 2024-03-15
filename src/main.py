@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
-    parser.add_argument('--num_epochs', type=int, default=1e4, help='Specify max training epochs, default is 1e4')
+    parser.add_argument('--num_epochs', type=int, default=int(1e4), help='Specify max training epochs, default is 1e4')
     parser.add_argument('--batch_size', type=int, default=128, help='Specify batch size, default is 128')
     parser_args = parser.parse_args()
 
