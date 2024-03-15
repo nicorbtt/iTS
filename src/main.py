@@ -27,17 +27,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5'], required=True, help='Specify dataset name')
     parser.add_argument('--model', type=str, choices=['deepAR','transformer'], required=True, help="Specify model")
-    parser.add_argument('--distribution_head', type=str, choices=['poisson','negative_binomial', 'tweedie', 'tweedie-fix'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
+    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
-    parser.add_argument('--num_epochs', type=int, default=500, help='Specify max training epochs, default is 500')
+    parser.add_argument('--num_epochs', type=int, default=1e4, help='Specify max training epochs, default is 1e4')
     parser.add_argument('--batch_size', type=int, default=128, help='Specify batch size, default is 128')
     parser_args = parser.parse_args()
 
     logger = Logger()
     # Import data
     logger.log(f"Loading dataset {parser_args.dataset_name}")
-    data_raw, data_info = load_raw(dataset_name=parser_args.dataset_name, datasets_folder_path=os.path.join("..","data"))
+    data_raw, data_info = load_raw(dataset_name=parser_args.dataset_name, datasets_folder_path=os.path.join("data"))
 
     # Compute intermittent indicators
     logger.log(f"Computing intermittent indicators")
@@ -99,27 +99,27 @@ if __name__ == "__main__":
 
     dt = datetime.now().strftime("%Y-%m-%d-%H:%M")
     model_folder_name = model_builder.model + "__" + parser_args.dataset_name + "__" + dt
-    model_folder_path = os.path.join("..", "trained_models", model_folder_name)
+    model_folder_path = os.path.join("trained_models", model_folder_name)
     if not os.path.exists(path=model_folder_path):
         os.makedirs(model_folder_path)
         # 5. Plot of Learning curves
         learning_curves(history, path=model_folder_path)
         # 6. Save the model and params
-        torch.save(early_stop.best_model, os.path.join("..", "trained_models", model_folder_name, "model_state.model"))
-        json.dump(model_builder.export_config(), open(os.path.join("..","trained_models",model_folder_name,"model_params.json"), "w"))
+        torch.save(early_stop.best_model, os.path.join("trained_models", model_folder_name, "model_state.model"))
+        json.dump(model_builder.export_config(), open(os.path.join("trained_models",model_folder_name,"model_params.json"), "w"))
         json.dump({'datetime': dt, 
                 'dataset': parser_args.dataset_name, 
                 'model': model_builder.model,
                 'distribution_head': model_builder.distribution_head,
                 'scaling': model_builder.scaling,
                 'epoch': epoch,
-                'early_stop': early_stop.stop}, open(os.path.join("..","trained_models",model_folder_name,"experiment.json"), "w"))
+                'early_stop': early_stop.stop}, open(os.path.join("trained_models",model_folder_name,"experiment.json"), "w"))
 
     # Load the model from disk
     logger.log("Loading the model")
-    model_params = json.load(open(os.path.join("..","trained_models",model_folder_name,"model_params.json"), "r"))
+    model_params = json.load(open(os.path.join("trained_models",model_folder_name,"model_params.json"), "r"))
     model_state = torch.load(os.path.join(model_folder_path,"model_state.model"))
-    experiment_info = json.load(open(os.path.join("..","trained_models",model_folder_name,"experiment.json"), "r"))
+    experiment_info = json.load(open(os.path.join("trained_models",model_folder_name,"experiment.json"), "r"))
     model_builder = ModelConfigBuilder(model=experiment_info['model'], distribution_head=experiment_info['distribution_head'], scaling=experiment_info['scaling'])
     model_builder.build(data_info, **model_params)
     model = model_builder.get_model()

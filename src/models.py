@@ -22,7 +22,7 @@ class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
         assert model in ["deepAR", "transformer"]
-        assert distribution_head in ["poisson","negative_binomial", "tweedie", "tweedie-fix"]
+        assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
         self.distribution_head = distribution_head
@@ -64,7 +64,7 @@ class ModelConfigBuilder:
                 'dropout_rate' : _check('dropout_rate', 0.1),
                 'distr_output' : {
                         'poisson' : PoissonOutput(),
-                        'negative_binomial' : NegativeBinomialOutput(),
+                        'negbinom' : NegativeBinomialOutput(),
                         'tweedie' : TweedieOutput(),
                         'tweedie-fix' : FixedDispersionTweedieOutput()
                     }[self.distribution_head],
@@ -86,7 +86,7 @@ class ModelConfigBuilder:
                 context_length = _check('context_length', data_info['h']*2),
                 distribution_output = {
                         'poisson' : 'poisson',
-                        'negative_binomial' : 'negative_binomial',
+                        'negbinom' : 'negative_binomial',
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed dispersion tweedie'
                     }[self.distribution_head],
@@ -213,5 +213,5 @@ class EarlyStop():
             self.current_patience = self.current_patience + 1
             if self.current_patience == self.patience:
                 self.logger.log_earlystop_stop(epoch, self.best_val_loss)
-                self.stop == True
+                self.stop = True
 
