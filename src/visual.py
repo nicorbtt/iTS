@@ -41,14 +41,21 @@ import logging
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO, datefmt='%d-%b-%y %H:%M:%S')
 
 class Logger():
+
+    def __init__(self, disable=False) -> None:
+        self.disable=disable
+
     def log(self, s):
-        logging.info(s)
+        if not self.disable: logging.info(s)
 
     def log_epoch(self, epoch, history):
-        logging.info(f"Epoch {epoch+1} \t Train Loss: {history['train_loss'][-1]:.3f} \t Val Loss: {history['val_loss'][-1]:.3f}")
+        if not self.disable: 
+            logging.info(f"Epoch {epoch+1} \t Train Loss: {history['train_loss'][-1]:.3f} \t Val Loss: {history['val_loss'][-1]:.3f}")
     
     def log_earlystop_newbest(self, best_val_loss):
-        logging.info(f"Early stopping, new validation best: {best_val_loss:.3f}, keep training!")
+        if not self.disable: 
+            logging.info(f"Early stopping, new validation best: {best_val_loss:.3f}, keep training!")
 
     def log_earlystop_stop(self, epoch, best_val_loss):
-        logging.info(f"Early stopping after {epoch+1} epochs. Validation best: {best_val_loss:.3f}")
+        if not self.disable: 
+            logging.info(f"Early stopping after {epoch+1} epochs. Validation best: {best_val_loss:.3f}")

@@ -32,9 +32,10 @@ if __name__ == "__main__":
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
     parser.add_argument('--num_epochs', type=int, default=int(1e4), help='Specify max training epochs, default is 1e4')
     parser.add_argument('--batch_size', type=int, default=128, help='Specify batch size, default is 128')
+    parser.add_argument('--silent', '-s', action='store_true', help='Silent, i.e. no verbose')
     parser_args = parser.parse_args()
 
-    logger = Logger()
+    logger = Logger(disable=parser_args.silent)
     # Import data
     logger.log(f"Loading dataset {parser_args.dataset_name}")
     data_raw, data_info = load_raw(dataset_name=parser_args.dataset_name, datasets_folder_path=os.path.join("data"))
@@ -67,8 +68,6 @@ if __name__ == "__main__":
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=6e-4, betas=(0.9, 0.95), weight_decay=1e-1)
     model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(model, optimizer, train_dataloader, valid_dataloader)
-
-    logger = Logger()
     early_stop = EarlyStop(logger, patience=20, min_delta=1e-3)
 
     # Training loop
@@ -97,7 +96,7 @@ if __name__ == "__main__":
         early_stop.update(model, epoch, history['val_loss'][-1])
         if early_stop.stop: break
 
-    dt = datetime.now().strftime("%Y-%m-%d-%H:%M")
+    dt = datetime.now().strftime("%Y-%m-%d-%H:%M:%S:%f")
     model_folder_name = model_builder.model + "__" + parser_args.dataset_name + "__" + dt
     model_folder_path = os.path.join("trained_models", model_folder_name)
     if not os.path.exists(path=model_folder_path):
@@ -128,8 +127,11 @@ if __name__ == "__main__":
     # Prediction
     logger.log("Generating forecasts")
     model.eval()
-    forecasts = [predict(model, batch, device, CONFIG) 
-                for batch in tqdm(test_dataloader, total=math.ceil(len(datasets['test']) / parser_args.batch_size))]
+    if parser_args.silent:
+        forecasts = [predict(model, batch, device, CONFIG) for batch in test_dataloader]
+    else:
+        forecasts = [predict(model, batch, device, CONFIG) 
+                    for batch in tqdm(test_dataloader, total=math.ceil(len(datasets['test']) / parser_args.batch_size))]
     forecasts = np.vstack(forecasts)
     actuals = np.array([x[FieldName.TARGET][-data_info['h']:] for x in datasets['test']])
     assert actuals.shape[0] == forecasts.shape[0]
