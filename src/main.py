@@ -1,7 +1,7 @@
 from dataloader import load_raw, create_datasets, create_dataloaders
-from visual import learning_curves, forecast_plot, Logger
+from visual import learning_curves, Logger
 from models import ModelConfigBuilder, forward, predict, EarlyStop
-from measures import compute_intermittent_indicators, label_intermittent, quantile_loss
+from measures import compute_intermittent_indicators, label_intermittent, quantile_loss_sample
 
 import os
 import argparse
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     # Quantile Loss
     logger.log("Computing performance measures")
     metrics = {}
-    metrics['quantile_loss'] = quantile_loss(actuals, forecasts, q=[0.25, 0.5, 0.8, 0.9, 0.95, 0.99])
+    metrics['quantile_loss'] = quantile_loss_sample(actuals, forecasts, quantiles=[0.25, 0.5, 0.8, 0.9, 0.95, 0.99])
     json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"))
 
     logger.log(f"End. Find results in {model_folder_path}")
