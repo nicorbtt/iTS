@@ -70,7 +70,7 @@ class ModelConfigBuilder:
                     }[self.distribution_head],
                 'lags_seq' : lags_sequence,
                 'scaling' : {
-                        'MASE' : 'MASE',
+                        'mase' : 'MASE',
                         'mean' : 'mean',
                         'mean-demand' : 'mean demand',
                     }[self.scaling] if self.scaling else False,
