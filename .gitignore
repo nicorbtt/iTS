@@ -165,3 +165,4 @@ data
 packages/*
 trained_models
 access.token
+script.sh

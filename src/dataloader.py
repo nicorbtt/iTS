@@ -55,7 +55,8 @@ def load_raw(dataset_name, datasets_folder_path):
     data_info = {
         'h' : DATASETS_METADATA[dataset_name]['h'],
         'freq' : DATASETS_METADATA[dataset_name]['freq'],
-        'start' : DATASETS_METADATA[dataset_name]['start']
+        'start' : DATASETS_METADATA[dataset_name]['start'],
+        'w' : DATASETS_METADATA[dataset_name]['w']
     }
     return(data_raw, data_info)
 
