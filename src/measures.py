@@ -11,6 +11,7 @@ def compute_adi_cv2(data):
     return adi, cv2
 
 def compute_intermittent_indicators(data):
+    # TODO add NaN ts filter
     if (isinstance(data, pd.DataFrame)):
         data = data.values
     assert isinstance(data, np.ndarray) and data.ndim == 2

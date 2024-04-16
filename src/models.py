@@ -52,7 +52,7 @@ class ModelConfigBuilder:
                 raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DEEPAR}")
             self.params = {
                 'freq' : data_info['freq'],
-                'context_length' : _check('context_length', data_info['h']*2),
+                'context_length' : _check('context_length', data_info['h']*data_info['w']),
                 'prediction_length' : _check('prediction_length', data_info['h']),
                 'num_feat_dynamic_real' : 0,
                 'num_feat_static_real' : 0,
@@ -83,7 +83,7 @@ class ModelConfigBuilder:
                 raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DEEPAR}")
             self.params = TimeSeriesTransformerConfig(
                 prediction_length = _check('prediction_length', data_info['h']),
-                context_length = _check('context_length', data_info['h']*2),
+                context_length = _check('context_length', data_info['h']*data_info['w']),
                 distribution_output = {
                         'poisson' : 'poisson',
                         'negbin' : 'negative_binomial',

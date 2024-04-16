@@ -38,13 +38,14 @@ from transformers import PretrainedConfig
 
 
 ### Datasets Metadata
+# (context_length = w * h)
 DATASETS_METADATA = {
-    'OnlineRetail'  : {'h' : 28,    'freq' : 'D', 'start' : '2010-12-01'},
-    'Auto'          : {'h' : 6,     'freq' : 'M', 'start' : '2010-01-01'},
-    'RAF'           : {'h' : 12,    'freq' : 'M', 'start' : '1996-01-01'},
-    'carparts'      : {'h' : 6,     'freq' : 'M', 'start' : '1998-01-01'},
-    'syph'          : {'h' : 8,     'freq' : 'W', 'start' : '2007-01-01'},
-    'M5'            : {'h' : 28,    'freq' : 'D', 'start' : '2011-01-29'},
+    'OnlineRetail'  : {'N': 2489,   'L': 374,   'h': 28,    'freq' : 'D', 'start' : '2010-12-01', 'w' : 2},
+    'Auto'          : {'N': 3000,   'L': 24,    'h': 6,     'freq' : 'M', 'start' : '2010-01-01', 'w' : 2},
+    'RAF'           : {'N': 5000,   'L': 84,    'h': 12,    'freq' : 'M', 'start' : '1996-01-01', 'w' : 3},
+    'carparts'      : {'N': 2509,   'L': 51,    'h': 6,     'freq' : 'M', 'start' : '1998-01-01', 'w' : 2},
+    'syph'          : {'N': 67,     'L': 209,   'h': 8,     'freq' : 'W', 'start' : '2007-01-01', 'w' : 2},
+    'M5'            : {'N': 30490,  'L': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4},
 }
 
 ### Import raw data from disk
