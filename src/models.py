@@ -88,12 +88,12 @@ class ModelConfigBuilder:
                         'poisson' : 'poisson',
                         'negbin' : 'negative_binomial',
                         'tweedie' : 'tweedie',
-                        'tweedie-fix' : 'fixed dispersion tweedie'
+                        'tweedie-fix' : 'fixed_dispersion_tweedie'
                     }[self.distribution_head],
                 loss = "nll",
                 input_size = 1,
                 scaling = {
-                        'MASE' : 'MASE',
+                        'mase' : 'MASE',
                         'mean' : 'mean',
                         'mean-demand' : 'mean demand'
                     }[self.scaling] if self.scaling else None,
