@@ -24,7 +24,6 @@ from torch.distributions import (
     Normal,
     Poisson,
 )
-from .tweedie import Tweedie, FixedDispersionTweedie
 
 from gluonts.core.component import validated
 from gluonts.model.forecast_generator import (
@@ -216,41 +215,6 @@ class PoissonOutput(DistributionOutput):
 
         return Poisson(rate=rate)
 
-    @property
-    def event_shape(self) -> Tuple:
-        return ()
-    
-
-class TweedieOutput(DistributionOutput):
-
-    args_dim: Dict[str, int] = {"mu": 1, "phi": 1, "rho":1}
-    distr_cls: type = Tweedie
-
-    @classmethod
-    def domain_map(cls, mu: torch.Tensor, phi: torch.Tensor, rho: torch.Tensor):
-        mu = F.softplus(mu).clamp_min(torch.finfo(mu.dtype).eps)
-        phi = F.softplus(phi).clamp_min(torch.finfo(phi.dtype).eps)
-        rho = (1+rho.sigmoid()).clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
-        
-        rho = rho.clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
-        return mu.squeeze(-1), phi.squeeze(-1), rho.squeeze(-1)
-        
-    @property
-    def event_shape(self) -> Tuple:
-        return ()
-        
-class FixedDispersionTweedieOutput(DistributionOutput):
-    args_dim: Dict[str, int] = {"mu": 1, "rho":1}
-    distr_cls: type = FixedDispersionTweedie
-
-    @classmethod
-    def domain_map(cls, mu: torch.Tensor, rho: torch.Tensor):
-        mu = F.softplus(mu).clamp_min(torch.finfo(mu.dtype).eps)
-        rho = (1+rho.sigmoid()).clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
-        
-        rho = rho.clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
-        return mu.squeeze(-1), rho.squeeze(-1)
-        
     @property
     def event_shape(self) -> Tuple:
         return ()

@@ -38,6 +38,7 @@ from ...time_series_utils import (
     TweedieOutput,
     FixedDispersionTweedieOutput,
     PoissonOutput,
+    ZeroInflatedPoissonOutput,
 )
 from ...utils import (
     add_start_docstrings,
@@ -1574,6 +1575,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             self.distribution_output = FixedDispersionTweedieOutput()
         elif config.distribution_output == "poisson":
             self.distribution_output = PoissonOutput()
+        elif config.distribution_output == "zero_inflated_poisson":
+            self.distribution_output = ZeroInflatedPoissonOutput()
         else:
             raise ValueError(f"Unknown distribution output {config.distribution_output}")
 

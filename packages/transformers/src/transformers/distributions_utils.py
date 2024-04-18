@@ -73,15 +73,6 @@ class Tweedie(ExponentialFamily):
         
         if torch.any(torch.isinf(log_z)):
             idx = torch.arange(len(log_z))[torch.isinf(log_z)]
-            print('idx',torch.arange(len(log_z))[torch.isinf(log_z)],
-                  '\ny', y[idx], '\y^(-alpha)', torch.pow(y, -alpha)[idx], '\n(rho-1)^(alpha)', torch.pow(rho-1, alpha)[idx],
-                  )
-            
-            print('\nrho', rho[idx],'\tmean rho', torch.mean(rho), '\tmax rho', torch.max(rho),  '\tmin rho', torch.min(rho))
-            print('\nphi', phi[idx],'\tmean rho', torch.mean(phi), '\tmax phi', torch.max(phi),  '\tmin phi', torch.min(phi))
-            print('\nmu', mu[idx],'\tmean mu', torch.mean(mu), '\tmax mu', torch.max(mu),  '\tmin mu', torch.min(mu))
-            print('\ny', mu[idx],'\tmean y', torch.mean(y), '\tmax y', torch.max(y),  '\tmin y', torch.min(y))
-            
             raise OverflowError("z growing towards infinity")
         
         j_max = self.__get_jmax(y, phi, rho)
@@ -161,6 +152,21 @@ class Tweedie(ExponentialFamily):
     
     @property
     def gamma_rate(self): return 1/(self.phi*(self.rho -1)*torch.pow(self.mu, self.rho -1))
+
+
+    mu, phi, rho = torch.tensor([.5]), torch.tensor([3.4]), torch.tensor([1.5])
+
+
+#PARAMETERIZATION
+    
+#lambd = torch.pow(mu, 2-rho)/(phi*(2 - rho))
+#alpha =  (2-rho)/(rho-1)
+#beta =  1/(phi*(rho -1)*torch.pow(mu, rho -1))
+
+#mu = lambd * alpha / beta
+#phi = (alpha+1)/(torch.pow(beta, alpha/(alpha+1))*torch.pow(lambd*alpha, 1/(alpha+1)))
+#rho = (alpha+2)/(alpha + 1)
+
     
     def sample(self, sample_shape=torch.Size()):
         
@@ -195,3 +201,62 @@ class FixedDispersionTweedie(Tweedie):
     def __init__(self, mu, rho, validate_args=None):
         super().__init__(mu, torch.tensor([1.]), rho, validate_args)
 
+
+
+
+class ZeroInflatedPoisson(ExponentialFamily):
+
+    arg_constraints = {"rate": constraints.nonnegative,
+                       "p": constraints.interval(0,1)}
+    support = constraints.nonnegative
+    has_rsample = True
+    _mean_carrier_measure = 0
+    
+    @property
+    def mean(self):
+        return self.p*(self.rate-1)
+        
+    @property
+    def variance(self):
+        raise NotImplementedError()
+    
+    def __init__(self, rate, p, validate_args=None):
+        self.rate, self.p = broadcast_all(rate, p)
+        if isinstance(rate, Number) and isinstance(p, Number):
+            batch_shape = torch.Size()
+        else:
+            batch_shape = self.rate.size()
+        super().__init__(batch_shape, validate_args=validate_args)
+
+    def log_prob(self, value):
+        value = torch.as_tensor(value, dtype=self.rate.dtype, device=self.p.device)
+        if self._validate_args:
+            self._validate_sample(value)
+            
+        value, rate, p = broadcast_all(value, self.rate, self.p)
+        
+        log_p = torch.full(value.shape, torch.nan)
+
+        zeros = value == 0
+        non_zeros = ~zeros
+        
+        if torch.any(zeros):
+            log_p[zeros] = torch.log(p[zeros])
+        
+        if torch.any(non_zeros):
+            log_p[non_zeros] = torch.log(1-p[non_zeros]) + Poisson(rate[non_zeros]).log_prob(value[non_zeros] - 1)
+        
+        return log_p
+    
+    def rsample(self, sample_shape=torch.Size()):
+        
+        rate, p = broadcast_all(self.rate, self.p)
+
+        with torch.no_grad():
+            
+            return torch.bernoulli(torch.broadcast_to(p, sample_shape + p.shape))*(1+Poisson(rate).sample(sample_shape))
+        
+    def cdf(self, value):
+        
+        raise NotImplementedError
+    

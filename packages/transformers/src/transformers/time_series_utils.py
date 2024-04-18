@@ -31,7 +31,7 @@ from torch.distributions import (
     TransformedDistribution,
 )
 
-from .distributions_utils import Tweedie, FixedDispersionTweedie
+from .distributions_utils import Tweedie, FixedDispersionTweedie, ZeroInflatedPoisson
 
 
 class AffineTransformed(TransformedDistribution):
@@ -239,7 +239,6 @@ class TweedieOutput(DistributionOutput):
         phi = cls.squareplus(phi).clamp_min(torch.finfo(phi.dtype).eps)
         rho = (1+rho.sigmoid()).clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
         
-        rho = rho.clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
         return mu.squeeze(-1), phi.squeeze(-1), rho.squeeze(-1)
     
     def _base_distribution(self, distr_args) -> Distribution:
@@ -264,7 +263,6 @@ class FixedDispersionTweedieOutput(DistributionOutput):
         mu = cls.squareplus(mu).clamp_min(torch.finfo(mu.dtype).eps)
         rho = (1+rho.sigmoid()).clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
         
-        rho = rho.clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
         return mu.squeeze(-1), rho.squeeze(-1)
     
     def _base_distribution(self, distr_args) -> Distribution:
@@ -297,4 +295,36 @@ class PoissonOutput(DistributionOutput):
     ) -> Distribution:
         rate = distr_args
 
+        if scale is not None:   
+            rate = rate * scale
+
         return self._base_distribution((rate))
+    
+
+class ZeroInflatedPoissonOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"rate": 1, "p":1}
+    distribution_class: type = ZeroInflatedPoisson
+
+    @classmethod
+    def domain_map(cls, rate: torch.Tensor, p: torch.Tensor):
+        rate = cls.squareplus(rate).clamp_min(torch.finfo(rate.dtype).eps)
+        p = p.sigmoid().clamp(torch.finfo(p.dtype).eps, 1-torch.finfo(p.dtype).eps)
+        return rate.squeeze(-1), p.squeeze(-1)
+    
+    def _base_distribution(self, distr_args) -> Distribution:
+        rate, p = distr_args
+        if self.dim == 1:
+            return self.distribution_class(rate=rate, p=p)
+        else:
+            return Independent(self.distribution_class(rate=rate, p=p), 1)
+        
+    def distribution(
+        self, distr_args, loc: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None
+    ) -> Distribution:
+        rate, p = distr_args
+
+        if scale is not None:   
+            rate = rate * scale
+
+        return self._base_distribution((rate, p))
+  

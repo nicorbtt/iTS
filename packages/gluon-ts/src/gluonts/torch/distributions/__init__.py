@@ -21,8 +21,6 @@ from .distribution_output import (
     NormalOutput,
     PoissonOutput,
     LaplaceOutput,
-    TweedieOutput,
-    FixedDispersionTweedieOutput
 )
 from .generalized_pareto import GeneralizedPareto, GeneralizedParetoOutput
 from .implicit_quantile_network import (
@@ -40,6 +38,13 @@ from .spliced_binned_pareto import (
 )
 from .studentT import StudentTOutput
 from .truncated_normal import TruncatedNormal, TruncatedNormalOutput
+from .tweedie import (
+    Tweedie, 
+    TweedieOutput, 
+    FixedDispersionTweedie, 
+    FixedDispersionTweedieOutput,
+)
+from .zero_inflated_poisson import ZeroInflatedPoisson, ZeroInflatedPoissonOutput
 
 __all__ = [
     "AffineTransformed",
@@ -48,6 +53,7 @@ __all__ = [
     "BinnedUniformsOutput",
     "DiscreteDistribution",
     "DistributionOutput",
+    "FixedDispersionTweedie",
     "FixedDispersionTweedieOutput",
     "GammaOutput",
     "GeneralizedPareto",
@@ -69,5 +75,8 @@ __all__ = [
     "StudentTOutput",
     "TruncatedNormal",
     "TruncatedNormalOutput",
-    "TweedieOutput"
+    "Tweedie",
+    "TweedieOutput",
+    "ZeroInflatedPoisson",
+    "ZeroInflatedPoissonOutput"
 ]

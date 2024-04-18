@@ -11,7 +11,8 @@ from gluonts.torch.distributions import (
     PoissonOutput, 
     NegativeBinomialOutput, 
     TweedieOutput, 
-    FixedDispersionTweedieOutput
+    FixedDispersionTweedieOutput,
+    ZeroInflatedPoissonOutput
 )
 from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerForPrediction
 
@@ -22,7 +23,7 @@ class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
         assert model in ["deepAR", "transformer"]
-        assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix"]
+        assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix", "zero-inf-pois"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
         self.distribution_head = distribution_head
@@ -66,7 +67,8 @@ class ModelConfigBuilder:
                         'poisson' : PoissonOutput(),
                         'negbin' : NegativeBinomialOutput(),
                         'tweedie' : TweedieOutput(),
-                        'tweedie-fix' : FixedDispersionTweedieOutput()
+                        'tweedie-fix' : FixedDispersionTweedieOutput(),
+                        'zero-inf-pois' : ZeroInflatedPoissonOutput()
                     }[self.distribution_head],
                 'lags_seq' : lags_sequence,
                 'scaling' : {
@@ -88,7 +90,8 @@ class ModelConfigBuilder:
                         'poisson' : 'poisson',
                         'negbin' : 'negative_binomial',
                         'tweedie' : 'tweedie',
-                        'tweedie-fix' : 'fixed_dispersion_tweedie'
+                        'tweedie-fix' : 'fixed_dispersion_tweedie',
+                        'zero-inf-pois' : 'zero_inflated_poisson'
                     }[self.distribution_head],
                 loss = "nll",
                 input_size = 1,
@@ -119,7 +122,7 @@ class ModelConfigBuilder:
                 decoder_layerdrop = _check('decoder_layerdrop', 0.1),               # The dropout probability for the attention and fully connected layers for each decoder layer
                 attention_dropout = _check('attention_dropout', 0.1),               # The dropout probability for the attention probabilities
                 activation_dropout = _check('activation_dropout', 0.1),             # The dropout probability used between the two layers of the feed-forward networks
-                num_parallel_samples = _check('num_parallel_samples', 100),         # The number of samples to generate in parallel for each time step of inference
+                num_parallel_samples = _check('num_parallel_samples', 200),         # The number of samples to generate in parallel for each time step of inference
                 init_std = _check('init_std', 0.02),                                # The standard deviation of the truncated normal weight initialization distribution
                 use_cache = _check('use_cache', True),                              # Whether to use the past key/values attentions (if applicable to the model) to speed up decoding
             )

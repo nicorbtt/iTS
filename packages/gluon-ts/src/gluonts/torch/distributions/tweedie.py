@@ -1,9 +1,12 @@
 from numbers import Number
-from typing import Any, Optional
+from typing import Any, Dict, Tuple, Optional
+from .distribution_output import DistributionOutput
 import math
+
 
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 from torch.distributions.exp_family import ExponentialFamily
 from torch.distributions import constraints
 from torch.distributions.utils import broadcast_all
@@ -72,14 +75,6 @@ class Tweedie(ExponentialFamily):
         
         if torch.any(torch.isinf(log_z)):
             idx = torch.arange(len(log_z))[torch.isinf(log_z)]
-            print('idx',torch.arange(len(log_z))[torch.isinf(log_z)],
-                  '\ny', y[idx], '\y^(-alpha)', torch.pow(y, -alpha)[idx], '\n(rho-1)^(alpha)', torch.pow(rho-1, alpha)[idx],
-                  )
-            
-            print('\nrho', rho[idx],'\tmean rho', torch.mean(rho), '\tmax rho', torch.max(rho),  '\tmin rho', torch.min(rho))
-            print('\nphi', phi[idx],'\tmean rho', torch.mean(phi), '\tmax phi', torch.max(phi),  '\tmin phi', torch.min(phi))
-            print('\nmu', mu[idx],'\tmean mu', torch.mean(mu), '\tmax mu', torch.max(mu),  '\tmin mu', torch.min(mu))
-            print('\ny', mu[idx],'\tmean y', torch.mean(y), '\tmax y', torch.max(y),  '\tmin y', torch.min(y))
             
             raise OverflowError("z growing towards infinity")
         
@@ -149,7 +144,16 @@ class Tweedie(ExponentialFamily):
             log_p[non_zeros] = self.log_prob_nonzero(value[non_zeros], mu[non_zeros], phi[non_zeros], rho[non_zeros])
         
         return log_p
+    
+#PARAMETERIZATION
+    
+#lambd = torch.pow(mu, 2-rho)/(phi*(2 - rho))
+#alpha =  (2-rho)/(rho-1)
+#beta =  1/(phi*(rho -1)*torch.pow(mu, rho -1))
 
+#mu = lambd * alpha / beta
+#phi = (alpha+1)/(torch.pow(beta, alpha/(alpha+1))*torch.pow(lambd*alpha, 1/(alpha+1)))
+#rho = (alpha+2)/(alpha + 1)
         
     @property
     def poisson_rate(self): return torch.pow(self.mu, 2-self.rho)/(self.phi*(2 - self.rho))
@@ -193,3 +197,33 @@ class FixedDispersionTweedie(Tweedie):
     def __init__(self, mu, rho, validate_args=None):
         super().__init__(mu, torch.tensor([1.]), rho, validate_args)
 
+
+class TweedieOutput(DistributionOutput):
+
+    args_dim: Dict[str, int] = {"mu": 1, "phi": 1, "rho":1}
+    distr_cls: type = Tweedie
+
+    @classmethod
+    def domain_map(cls, mu: torch.Tensor, phi: torch.Tensor, rho: torch.Tensor):
+        mu = F.softplus(mu).clamp_min(torch.finfo(mu.dtype).eps)
+        phi = F.softplus(phi).clamp_min(torch.finfo(phi.dtype).eps)
+        rho = (1+rho.sigmoid()).clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
+        return mu.squeeze(-1), phi.squeeze(-1), rho.squeeze(-1)
+        
+    @property
+    def event_shape(self) -> Tuple:
+        return ()
+        
+class FixedDispersionTweedieOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"mu": 1, "rho":1}
+    distr_cls: type = FixedDispersionTweedie
+
+    @classmethod
+    def domain_map(cls, mu: torch.Tensor, rho: torch.Tensor):
+        mu = F.softplus(mu).clamp_min(torch.finfo(mu.dtype).eps)
+        rho = (1+rho.sigmoid()).clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
+        return mu.squeeze(-1), rho.squeeze(-1)
+        
+    @property
+    def event_shape(self) -> Tuple:
+        return ()
