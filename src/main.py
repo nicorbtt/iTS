@@ -4,6 +4,7 @@ from models import ModelConfigBuilder, forward, predict, EarlyStop
 from measures import compute_intermittent_indicators, label_intermittent, quantile_loss_sample
 
 import os
+import sys
 import argparse
 from datetime import datetime
 import numpy as np
@@ -27,15 +28,29 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5'], required=True, help='Specify dataset name')
     parser.add_argument('--model', type=str, choices=['deepAR','transformer'], required=True, help="Specify model")
-    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
+    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
     parser.add_argument('--num_epochs', type=int, default=int(1e4), help='Specify max training epochs, default is 1e4')
     parser.add_argument('--batch_size', type=int, default=128, help='Specify batch size, default is 128')
     parser.add_argument('--silent', '-s', action='store_true', help='Silent, i.e. no verbose')
+    parser.add_argument('--log', '-log', action='store_true', help='Whether to save the log')
     parser_args = parser.parse_args()
 
-    logger = Logger(disable=parser_args.silent)
+    dt = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+    model_folder_name = (
+        parser_args.model + "__" +
+        parser_args.dataset_name + "__" +
+        parser_args.distribution_head + "__" +
+        (parser_args.scaling if parser_args.scaling else "none") + "__" +
+        dt
+    )
+    model_folder_path = os.path.join(os.path.expanduser("~/switchdrive"), "iTS", "trained_models", model_folder_name)
+    if not os.path.exists(model_folder_path):
+        os.makedirs(model_folder_path)
+    
+    stdout = open(os.path.join(model_folder_path, "log.txt"), 'x') if parser_args.log else sys.stdout
+    logger = Logger(disable=parser_args.silent, stdout=stdout)
     # Import data
     logger.log(f"Loading dataset {parser_args.dataset_name}")
     data_raw, data_info = load_raw(dataset_name=parser_args.dataset_name, datasets_folder_path=os.path.join("data"))
@@ -96,29 +111,25 @@ if __name__ == "__main__":
         early_stop.update(model, epoch, history['val_loss'][-1])
         if early_stop.stop: break
 
-    dt = datetime.now().strftime("%Y-%m-%d-%H:%M:%S:%f")
-    model_folder_name = model_builder.model + "__" + parser_args.dataset_name + "__" + dt
-    model_folder_path = os.path.join("trained_models", model_folder_name)
-    if not os.path.exists(path=model_folder_path):
-        os.makedirs(model_folder_path)
-        # 5. Plot of Learning curves
-        learning_curves(history, path=model_folder_path)
-        # 6. Save the model and params
-        torch.save(early_stop.best_model, os.path.join("trained_models", model_folder_name, "model_state.model"))
-        json.dump(model_builder.export_config(), open(os.path.join("trained_models",model_folder_name,"model_params.json"), "w"))
-        json.dump({'datetime': dt, 
+    
+    # 5. Plot of Learning curves
+    learning_curves(history, path=model_folder_path, likelihood=model_builder.distribution_head, scaling=model_builder.scaling)
+    # 6. Save the model and params
+    torch.save(early_stop.best_model, os.path.join(model_folder_path, "model_state.model"))
+    json.dump(model_builder.export_config(), open(os.path.join(model_folder_path, "model_params.json"), "w"))
+    json.dump({'datetime': dt, 
                 'dataset': parser_args.dataset_name, 
                 'model': model_builder.model,
                 'distribution_head': model_builder.distribution_head,
                 'scaling': model_builder.scaling,
                 'epoch': epoch,
-                'early_stop': early_stop.stop}, open(os.path.join("trained_models",model_folder_name,"experiment.json"), "w"))
+                'early_stop': early_stop.stop}, open(os.path.join(model_folder_path, "experiment.json"), "w"))
 
     # Load the model from disk
     logger.log("Loading the model")
-    model_params = json.load(open(os.path.join("trained_models",model_folder_name,"model_params.json"), "r"))
-    model_state = torch.load(os.path.join(model_folder_path,"model_state.model"))
-    experiment_info = json.load(open(os.path.join("trained_models",model_folder_name,"experiment.json"), "r"))
+    model_params = json.load(open(os.path.join(model_folder_path, "model_params.json"), "r"))
+    model_state = torch.load(os.path.join(model_folder_path, "model_state.model"))
+    experiment_info = json.load(open(os.path.join(model_folder_path, "experiment.json"), "r"))
     model_builder = ModelConfigBuilder(model=experiment_info['model'], distribution_head=experiment_info['distribution_head'], scaling=experiment_info['scaling'])
     model_builder.build(data_info, **model_params)
     model = model_builder.get_model()
@@ -127,12 +138,7 @@ if __name__ == "__main__":
     # Prediction
     logger.log("Generating forecasts")
     model.eval()
-    if parser_args.silent:
-        forecasts = [predict(model, batch, device, CONFIG) for batch in test_dataloader]
-    else:
-        forecasts = [predict(model, batch, device, CONFIG) 
-                    for batch in tqdm(test_dataloader, total=math.ceil(len(datasets['test']) / parser_args.batch_size))]
-    forecasts = np.vstack(forecasts)
+    forecasts = np.vstack([predict(model, batch, device, CONFIG) for batch in test_dataloader])
     actuals = np.array([x[FieldName.TARGET][-data_info['h']:] for x in datasets['test']])
     assert actuals.shape[0] == forecasts.shape[0]
     assert actuals.shape[1] == forecasts.shape[2]
@@ -148,3 +154,4 @@ if __name__ == "__main__":
     json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"))
 
     logger.log(f"End. Find results in {model_folder_path}")
+    logger.off()

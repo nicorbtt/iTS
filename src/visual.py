@@ -5,14 +5,14 @@ import matplotlib.pyplot as plt
 
 
 # Plot learning curves
-def learning_curves(history, path, figsize=(10, 6)):
+def learning_curves(history, path, likelihood, scaling ,figsize=(10, 6)):
     plt.figure(figsize=figsize)
     epoch = len(history['train_loss'])
     plt.plot(range(epoch), history['train_loss'], label='train')
     plt.plot(range(epoch), history['val_loss'], label='valid')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Learning curves')
+    plt.title('Learning curves' + ' [likelihood: ' + likelihood + (', scaling:' +  scaling if scaling is not None else '') + ']')
     plt.legend()
     plt.tight_layout() 
     plt.savefig(os.path.join(path, "learning_curves.png"))
@@ -38,12 +38,16 @@ def forecast_plot(ts_index, forecasts, datasets, data_info, targetName, alphas=[
     plt.show()
 
 import logging
-logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO, datefmt='%d-%b-%y %H:%M:%S')
+from typing import IO
+import sys
 
 class Logger():
 
-    def __init__(self, disable=False) -> None:
+    def __init__(self, disable=False, stdout: IO[str] = sys.stdout) -> None:
         self.disable=disable
+        logging.basicConfig(stream=stdout, format='%(asctime)s - %(message)s', 
+                            level=logging.INFO, 
+                            datefmt='%d-%b-%y %H:%M:%S')
 
     def log(self, s):
         if not self.disable: logging.info(s)
@@ -59,3 +63,6 @@ class Logger():
     def log_earlystop_stop(self, epoch, best_val_loss):
         if not self.disable: 
             logging.info(f"Early stopping after {epoch+1} epochs. Validation best: {best_val_loss:.3f}")
+
+    def off(self):
+        sys.stdout = sys.__stdout__
