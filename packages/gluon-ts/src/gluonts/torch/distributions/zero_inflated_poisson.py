@@ -1,5 +1,5 @@
 from numbers import Number
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 from .distribution_output import DistributionOutput
 
 import torch
@@ -8,11 +8,7 @@ import torch.nn.functional as F
 from torch.distributions.exp_family import ExponentialFamily
 from torch.distributions import constraints
 from torch.distributions.utils import broadcast_all
-from torch.distributions import Poisson
-from torch.distributions.exp_family import ExponentialFamily
-from torch.distributions import constraints
-from torch.distributions.utils import broadcast_all
-from torch.distributions import Poisson, Gamma
+from torch.distributions import Poisson, Distribution
 
 
 
@@ -66,7 +62,7 @@ class ZeroInflatedPoisson(ExponentialFamily):
 
         with torch.no_grad():
             
-            return torch.bernoulli(torch.broadcast_to(p, sample_shape + p.shape))*(1+Poisson(rate).sample(sample_shape))
+            return torch.bernoulli(torch.broadcast_to(1-p, sample_shape + p.shape))*(1+Poisson(rate).sample(sample_shape))
         
     def cdf(self, value):
         
@@ -82,6 +78,19 @@ class ZeroInflatedPoissonOutput(DistributionOutput):
         rate = F.softplus(rate).clamp_min(torch.finfo(rate.dtype).eps)
         p = p.sigmoid().clamp(torch.finfo(p.dtype).eps, 1-torch.finfo(p.dtype).eps)
         return rate.squeeze(-1), p.squeeze(-1)
+    
+    def distribution(
+        self,
+        distr_args,
+        loc: Optional[torch.Tensor] = None,
+        scale: Optional[torch.Tensor] = None,
+    ) -> Distribution:
+        rate, p = distr_args
+
+        if scale is not None:
+            rate *= scale
+
+        return ZeroInflatedPoisson(rate=rate, p=p)
         
     @property
     def event_shape(self) -> Tuple:

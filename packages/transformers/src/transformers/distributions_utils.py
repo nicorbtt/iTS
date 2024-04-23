@@ -254,7 +254,7 @@ class ZeroInflatedPoisson(ExponentialFamily):
 
         with torch.no_grad():
             
-            return torch.bernoulli(torch.broadcast_to(p, sample_shape + p.shape))*(1+Poisson(rate).sample(sample_shape))
+            return torch.bernoulli(torch.broadcast_to(1-p, sample_shape + p.shape))*(1+Poisson(rate).sample(sample_shape))
         
     def cdf(self, value):
         
