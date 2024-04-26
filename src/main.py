@@ -8,13 +8,12 @@ import sys
 import argparse
 from datetime import datetime
 import numpy as np
-from tqdm import tqdm
 import json
-import math
 import torch
 from gluonts.dataset.field_names import FieldName
 from accelerate import Accelerator
 from torch.optim import AdamW
+import random
 
 
 if __name__ == "__main__":
@@ -35,7 +34,13 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=128, help='Specify batch size, default is 128')
     parser.add_argument('--silent', '-s', action='store_true', help='Silent, i.e. no verbose')
     parser.add_argument('--log', '-log', action='store_true', help='Whether to save the log')
+    parser.add_argument('--seed', '-seed', type=int, default=42, help='Seed for reproducibility, default is 42')
     parser_args = parser.parse_args()
+
+    # Set seed (everywhere)
+    random.seed(parser_args.seed)
+    torch.manual_seed(parser_args.seed)
+    torch.use_deterministic_algorithms(mode=True)
 
     dt = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
     model_folder_name = (
