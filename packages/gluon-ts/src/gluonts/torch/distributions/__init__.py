@@ -41,6 +41,8 @@ from .truncated_normal import TruncatedNormal, TruncatedNormalOutput
 from .tweedie import (
     Tweedie, 
     TweedieOutput, 
+    TweedieWithPriors, 
+    TweedieWithPriorsOutput, 
     FixedDispersionTweedie, 
     FixedDispersionTweedieOutput,
 )
@@ -77,6 +79,8 @@ __all__ = [
     "TruncatedNormalOutput",
     "Tweedie",
     "TweedieOutput",
+    "TweedieWithPriors",
+    "TweedieWithPriorsOutput",
     "ZeroInflatedPoisson",
     "ZeroInflatedPoissonOutput"
 ]

@@ -31,8 +31,12 @@ from torch.distributions import (
     TransformedDistribution,
 )
 
-from .distributions_utils import Tweedie, FixedDispersionTweedie, ZeroInflatedPoisson
-
+from .distributions_utils import (
+    Tweedie, 
+    FixedDispersionTweedie, 
+    TweedieWithPriors,
+    ZeroInflatedPoisson
+)
 
 class AffineTransformed(TransformedDistribution):
     def __init__(self, base_distribution: Distribution, loc=None, scale=None, event_dim=0):
@@ -271,6 +275,35 @@ class FixedDispersionTweedieOutput(DistributionOutput):
             return self.distribution_class(mu=mu, rho=rho)
         else:
             return Independent(self.distribution_class(mu=mu, rho=rho), 1)
+        
+    @property
+    def event_shape(self) -> Tuple:
+        return ()
+
+
+class TweedieWithPriorsOutput(DistributionOutput):
+
+    args_dim: Dict[str, int] = {"mu": 1, "phi": 1, "rho":1}
+    distribution_class: type = TweedieWithPriors
+
+    @classmethod
+    def domain_map(cls, mu: torch.Tensor, phi: torch.Tensor, rho: torch.Tensor):
+        mu = cls.squareplus(mu).clamp_min(torch.finfo(mu.dtype).eps)
+        phi = cls.squareplus(phi).clamp_min(torch.finfo(phi.dtype).eps)
+        rho = (1+rho.sigmoid()).clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
+        
+        return mu.squeeze(-1), phi.squeeze(-1), rho.squeeze(-1)
+    
+    def _base_distribution(self, distr_args) -> Distribution:
+        mu, phi, rho = distr_args
+        if self.dim == 1:
+            return self.distribution_class(mu=mu, phi=phi, rho=rho)
+        else:
+            return Independent(self.distribution_class(mu=mu, phi=phi, rho=rho), 1)
+        
+    @property
+    def event_shape(self) -> Tuple:
+        return ()
 
 
 class PoissonOutput(DistributionOutput):

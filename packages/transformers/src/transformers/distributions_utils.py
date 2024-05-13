@@ -7,7 +7,7 @@ from torch import Tensor
 from torch.distributions.exp_family import ExponentialFamily
 from torch.distributions import constraints
 from torch.distributions.utils import broadcast_all
-from torch.distributions import Poisson, Gamma
+from torch.distributions import Poisson, Gamma, Beta
 
         
 class Tweedie(ExponentialFamily):
@@ -259,4 +259,46 @@ class ZeroInflatedPoisson(ExponentialFamily):
     def cdf(self, value):
         
         raise NotImplementedError
+    
+
+class Prior():
+    
+    def __init__(self, distr, map = lambda x: x):
+        self.distr = distr
+        self.map = map
+    
+    def log_prob(self, value):
+        return self.distr.log_prob(self.map(value))        
+
+
+class TweedieWithPriors(Tweedie):
+    arg_constraints = {"mu": constraints.nonnegative,
+                       "phi": constraints.nonnegative,
+                       "rho": constraints.interval(1,2)}
+    support = constraints.nonnegative
+    has_rsample = True
+    _mean_carrier_measure = 0
+
+    def __init__(self, mu, phi, rho, 
+                 mu_prior = None,
+                 phi_prior = Prior(Gamma(torch.tensor([1.1]), torch.tensor([.05]))),
+                 rho_prior = Prior(distr = Beta(torch.tensor([1.3]), torch.tensor([2.6])), map = lambda x: x-1),
+                 validate_args=None):
+        super().__init__(mu, phi, rho, validate_args)
+        self.mu_prior, self.phi_prior, self.rho_prior = mu_prior, phi_prior, rho_prior
+
+    
+    def log_prob(self, value):
+        value = torch.as_tensor(value, dtype=self.mu.dtype, device=self.mu.device)
+        if self._validate_args:
+            self._validate_sample(value) 
+
+        value, mu, phi, rho = broadcast_all(value, self.mu, self.phi, self.rho)
+
+        log_p = super().log_prob(value)
+        for prior, param in zip([self.mu_prior, self.phi_prior, self.rho_prior], [mu, phi, rho]):
+            if prior is not None:
+                log_p += prior.log_prob(param)
+
+        return log_p     
     
