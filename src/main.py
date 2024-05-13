@@ -1,7 +1,7 @@
 from dataloader import load_raw, create_datasets, create_dataloaders
 from visual import learning_curves, Logger
 from models import ModelConfigBuilder, forward, predict, EarlyStop
-from measures import compute_intermittent_indicators, label_intermittent, quantile_loss_sample
+from measures import compute_intermittent_indicators, label_intermittent, quantile_loss_sample, rho_risk_sample
 
 import os
 import sys
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5'], required=True, help='Specify dataset name')
     parser.add_argument('--model', type=str, choices=['deepAR','transformer'], required=True, help="Specify model")
-    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
+    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix', 'tweedie-priors', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
     parser.add_argument('--num_epochs', type=int, default=int(1e4), help='Specify max training epochs, default is 1e4')
@@ -143,7 +143,12 @@ if __name__ == "__main__":
     # Prediction
     logger.log("Generating forecasts")
     model.eval()
-    forecasts = np.vstack([predict(model, batch, device, CONFIG) for batch in test_dataloader])
+    forecasts_list = []
+    for i, batch in enumerate(test_dataloader):
+        logger.log("Batch " + str(i+1) + " out of " + str(len(list(test_dataloader))))
+        forecasts_list.append(predict(model, batch, device, CONFIG))
+        forecasts = np.vstack(forecasts_list)
+    #forecasts = np.vstack([predict(model, batch, device, CONFIG) for batch in test_dataloader])
     actuals = np.array([x[FieldName.TARGET][-data_info['h']:] for x in datasets['test']])
     assert actuals.shape[0] == forecasts.shape[0]
     assert actuals.shape[1] == forecasts.shape[2]
@@ -154,8 +159,17 @@ if __name__ == "__main__":
 
     # Quantile Loss
     logger.log("Computing performance measures")
-    metrics = {}
-    metrics['quantile_loss'] = quantile_loss_sample(actuals, forecasts, quantiles=[0.25, 0.5, 0.8, 0.9, 0.95, 0.99])
+    idx_intermittent = np.logical_and(adi >= 1.32, cv2 < .49)
+    idx_intermittent_and_lumpy = adi >= 1.32
+    metrics = {'quantile_loss' : {'all' : quantile_loss_sample(actuals, forecasts),
+                                   'intermittent' : quantile_loss_sample(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:]),
+                                   'intermittent_and_lumpy' : quantile_loss_sample(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:])},
+               'rho_risk_nan' : {'all' : rho_risk_sample(actuals, forecasts, zero_denom = np.nan),
+                                 'intermittent' : rho_risk_sample(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:], zero_denom = np.nan),
+                                 'intermittent_and_lumpy' : rho_risk_sample(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:], zero_denom = np.nan)},
+               'rho_risk_1' : {'all' : rho_risk_sample(actuals, forecasts, zero_denom = 1.),
+                               'intermittent' : rho_risk_sample(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:], zero_denom = 1.),
+                               'intermittent_and_lumpy' : rho_risk_sample(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:], zero_denom = 1.)}}
     json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"))
 
     logger.log(f"End. Find results in {model_folder_path}")

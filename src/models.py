@@ -11,6 +11,7 @@ from gluonts.torch.distributions import (
     PoissonOutput, 
     NegativeBinomialOutput, 
     TweedieOutput, 
+    TweedieWithPriorsOutput,
     FixedDispersionTweedieOutput,
     ZeroInflatedPoissonOutput
 )
@@ -23,7 +24,7 @@ class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
         assert model in ["deepAR", "transformer"]
-        assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix", "zero-inf-pois"]
+        assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix", "tweedie-priors", "zero-inf-pois"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
         self.distribution_head = distribution_head
@@ -68,6 +69,7 @@ class ModelConfigBuilder:
                         'negbin' : NegativeBinomialOutput(),
                         'tweedie' : TweedieOutput(),
                         'tweedie-fix' : FixedDispersionTweedieOutput(),
+                        'tweedie-priors' : TweedieWithPriorsOutput(),
                         'zero-inf-pois' : ZeroInflatedPoissonOutput()
                     }[self.distribution_head],
                 'lags_seq' : lags_sequence,
@@ -91,6 +93,7 @@ class ModelConfigBuilder:
                         'negbin' : 'negative_binomial',
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed_dispersion_tweedie',
+                        'tweedie-priors' : 'tweedie_with_priors',
                         'zero-inf-pois' : 'zero_inflated_poisson'
                     }[self.distribution_head],
                 loss = "nll",
