@@ -10,7 +10,7 @@ def compute_adi_cv2(data):
     cv2 = (np.nanstd(nan_data, axis = 1) / np.nanmean(nan_data, axis = 1)) ** 2
     return adi, cv2
 
-def compute_intermittent_indicators(data):
+def compute_intermittent_indicators_v2(data):
     # TODO add NaN ts filter
     if (isinstance(data, pd.DataFrame)):
         data = data.values
@@ -26,10 +26,13 @@ def compute_intermittent_indicators(data):
         adi, cv2 = compute_adi_cv2(data)
     return adi, cv2
 
-def compute_intermittent_indicators_v2(data):
+def compute_intermittent_indicators(data, na_rm = True):
     if (isinstance(data, pd.DataFrame)):
         data = data.values
     assert isinstance(data, np.ndarray) and data.ndim == 2
+
+    if na_rm == True:
+        data = data[~np.any(np.isnan(data), axis=1),:]
     
     adi, cv2 = np.empty(len(data)), np.empty(len(data))
     idx = np.arange(data.shape[1])
@@ -75,8 +78,12 @@ def dataset_stats(data, to_pandas = True):
         for k in stats.keys():
             for s in ['mean', 'std']:
                v = stats[k][s]
+               if np.any(np.isnan(v)):
+                   v = v[~np.isnan(v)]
                df_dict[k + ' (' + s + ')'] = [np.min(v), np.quantile(v, .25), np.median(v), np.quantile(v, .75), np.max(v)]
-        return pd.DataFrame(df_dict, index=['min', '25%ile', 'median', '75%ile', 'max'])
+        df = pd.DataFrame(df_dict, index=['min', '25%ile', 'median', '75%ile', 'max'])
+        df.columns = pd.MultiIndex.from_product([('demand intervals', 'demand sizes', 'demand per period'), ('mean', 'std')])
+        return df
     else:
         return stats
 
@@ -98,7 +105,7 @@ def pinball(actual, pred, l):
 
 # Quantile loss
 def quantile_loss_(target: np.ndarray, forecast: np.ndarray, q: float) -> float:
-    return 2 * np.sum(np.abs((forecast - target) * ((target <= forecast) - q)))
+    return 2 * np.mean(np.abs((forecast - target) * ((target <= forecast) - q)))
 
 def quantile_loss(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99]):
     res = {}
@@ -113,6 +120,25 @@ def quantile_loss_sample(target: np.ndarray, forecast: np.ndarray, quantiles = [
         for j in range(len(quantiles)):
             tmp[i,:,j] = np.round(np.quantile(forecast[i], axis=1, q=quantiles[j]))
     return(quantile_loss(target, tmp, quantiles))
+
+
+def rho_risk_(target: np.ndarray, forecast: np.ndarray, q: float, zero_denom: float) -> float:
+    quantile_loss = 2 * np.sum(np.abs((forecast - target) * ((target <= forecast) - q)), axis=1)
+    actual_sum = np.sum(target, axis= 1, dtype=np.float32)
+    actual_sum[actual_sum == 0] = zero_denom
+    return np.nanmean(quantile_loss/actual_sum)
+
+def rho_risk(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99], zero_denom= np.nan):
+    res = {}
+    for q in range(len(quantiles)):
+        res['q'+str(quantiles[q])] = rho_risk_(target, np.round(forecast[:,:,q]), q=quantiles[q], zero_denom = zero_denom)
+    return(res)
+
+def rho_risk_sample(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99], zero_denom = np.nan):
+    tmp = np.transpose(np.round(np.quantile(forecast, quantiles, axis=1)), (1,2,0))
+    return (rho_risk(target, tmp, quantiles, zero_denom))
+
+
     
 
 # Mase
