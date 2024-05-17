@@ -34,13 +34,21 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=128, help='Specify batch size, default is 128')
     parser.add_argument('--silent', '-s', action='store_true', help='Silent, i.e. no verbose')
     parser.add_argument('--log', '-log', action='store_true', help='Whether to save the log')
-    parser.add_argument('--seed', '-seed', type=int, default=42, help='Seed for reproducibility, default is 42')
+    parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility, default is 42')
+    parser.add_argument('--max_idle_transforms', type=str, default="10000", help='(mini-batch sampling) Maximum number of times a transformation can receive an input without returning an output. This parameter is intended to catch infinite loops or inefficiencies, when transformations never or rarely return something, default is 10000')
+    parser.add_argument('--sample_zero_percentage', type=str, default="1", help='(mini-batch sampling) Maximum percentage of 0s allowed for each sample, default is 1 (i.e. do not discard anything)')
+    parser.add_argument('--p_reject', type=str, default="1", help='(mini-batch sampling) Probability of discard, default is 1 (i.e. discard all)')
     parser_args = parser.parse_args()
 
     # Set seed (everywhere)
     random.seed(parser_args.seed)
     torch.manual_seed(parser_args.seed)
     torch.use_deterministic_algorithms(mode=True)
+
+    # Set mini-batch sampling parameters
+    os.environ.setdefault("GLUONTS_MAX_IDLE_TRANSFORMS", parser.max_idle_transforms)
+    os.environ.setdefault("iTS_sample_zero_percentage", parser.sample_zero_percentage)
+    os.environ.setdefault("iTS_p_sample_zero_percentage_reject", parser.p_reject)
 
     dt = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
     model_folder_name = (

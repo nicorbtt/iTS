@@ -179,6 +179,8 @@ class FlatMapTransformation(Transformation):
     @validated()
     def __init__(self):
         self.max_idle_transforms = env.max_idle_transforms
+        self.sample_zero_percentage = env.sample_zero_percentage
+        self.p_sample_zero_percentage_reject = env.p_sample_zero_percentage_reject
 
     def __call__(
         self, data_it: Iterable[DataEntry], is_train: bool
@@ -189,7 +191,8 @@ class FlatMapTransformation(Transformation):
             result = self.flatmap_transform(data_entry.copy(), is_train)
             for x in result:
                 # Do not include samples with lot of 0s
-                if (np.mean(x['past_values']==0)) > 0.95: continue
+                if (np.mean(x['past_values']==0) > self.sample_zero_percentage) & (np.random.rand() < self.p_sample_zero_percentage_reject): 
+                    continue
                 num_idle_transforms = 0
                 yield x
 
@@ -203,7 +206,7 @@ class FlatMapTransformation(Transformation):
                     " calls.\nThis means the transformation looped over"
                     f" {self.max_idle_transforms} inputs without returning any"
                     " output.\nThis occurred in the following"
-                    f" transformation:\n{self}"
+                    f" transformation:\n{self}\n{self.sample_zero_percentage}"
                 )
 
     @abc.abstractmethod
