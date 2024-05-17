@@ -45,7 +45,7 @@ if __name__ == "__main__":
     torch.manual_seed(parser_args.seed)
     torch.use_deterministic_algorithms(mode=True)
 
-    # Set mini-batch sampling parameters
+    # Seting parameters of mini-batch sampling 
     os.environ.setdefault("GLUONTS_MAX_IDLE_TRANSFORMS", parser.max_idle_transforms)
     os.environ.setdefault("iTS_sample_zero_percentage", parser.sample_zero_percentage)
     os.environ.setdefault("iTS_p_sample_zero_percentage_reject", parser.p_reject)
