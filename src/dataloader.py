@@ -210,9 +210,7 @@ def create_instance_splitter(
 
     instance_sampler = {
         "train": train_sampler
-        or ExpectedNumInstanceSampler(
-            num_instances=1.0, min_future=config["prediction_length"]
-        ),
+        or ExpectedNumInstanceSampler(num_instances=1.0, min_future=config["prediction_length"]),
         "validation": validation_sampler
         or ValidationSplitSampler(min_future=config["prediction_length"]),
         "test": TestSplitSampler(),
@@ -367,7 +365,7 @@ def create_dataloaders(config, datasets, data_info, batch_size=128, num_batches_
                                                freq=data_info['freq'], 
                                                data=datasets['train'], 
                                                batch_size=batch_size, 
-                                               num_batches_per_epoch=100)
+                                               num_batches_per_epoch=num_batches_per_epoch)
     valid_dataloader = create_backtest_dataloader(config=config, 
                                                   freq=data_info['freq'], 
                                                   data=datasets['valid'],
