@@ -7,7 +7,7 @@ from torch import Tensor
 from torch.distributions.exp_family import ExponentialFamily
 from torch.distributions import constraints
 from torch.distributions.utils import broadcast_all
-from torch.distributions import Poisson, Gamma, Beta
+from torch.distributions import Poisson, Gamma, Beta, NegativeBinomial
 
         
 class Tweedie(ExponentialFamily):
@@ -44,7 +44,7 @@ class Tweedie(ExponentialFamily):
 
     def __get_log_z(self, y, phi, rho): 
         alpha = self.__get_alpha(rho)
-        return -alpha*torch.log(y) + alpha*torch.log(rho-1) - (2 - rho) - (1-alpha)*torch.log(phi)
+        return -alpha*torch.log(y) + alpha*torch.log(rho-1) - torch.log(2 - rho) - (1-alpha)*torch.log(phi)
 
     
     def __get_log_W(self, alpha, j, constant_log_W, pi):
@@ -83,7 +83,6 @@ class Tweedie(ExponentialFamily):
         log_W_max = self.__get_log_W_max(alpha, j, pi)
         
         log_W = log_W_max
-        iter = 0
         while torch.any((log_W_max - log_W)[log_W_max >= log_W] < 37):#QUESTO SERVE PERCHÉ A VOLE log_W CRESCE A DISMISURA :/
             j += 1
             log_W = self.__get_log_W(alpha, j, constant_log_W, pi)
@@ -153,8 +152,6 @@ class Tweedie(ExponentialFamily):
     @property
     def gamma_rate(self): return 1/(self.phi*(self.rho -1)*torch.pow(self.mu, self.rho -1))
 
-
-    mu, phi, rho = torch.tensor([.5]), torch.tensor([3.4]), torch.tensor([1.5])
 
 
 #PARAMETERIZATION
@@ -261,6 +258,63 @@ class ZeroInflatedPoisson(ExponentialFamily):
         raise NotImplementedError
     
 
+class ZeroInflatedNegativeBinomial(ExponentialFamily):
+
+    arg_constraints = {"total_count": constraints.nonnegative,
+                       "probs": constraints.interval(0,1),
+                       "p": constraints.interval(0,1)}
+    support = constraints.nonnegative
+    has_rsample = True
+    _mean_carrier_measure = 0
+    
+    @property
+    def mean(self):
+        return self.p*(self.total_count*self.probs/(1-self.probs)-1)
+        
+    @property
+    def variance(self):
+        raise NotImplementedError()
+    
+    def __init__(self, total_count, probs, p, validate_args=None):
+        self.total_count, self.probs, self.p = broadcast_all(total_count, probs, p)
+        if isinstance(total_count, Number) and isinstance(probs, Number) and isinstance(probs, Number):
+            batch_shape = torch.Size()
+        else:
+            batch_shape = self.rate.size()
+        super().__init__(batch_shape, validate_args=validate_args)
+
+    def log_prob(self, value):
+        value = torch.as_tensor(value, dtype=self.count.dtype, device=self.p.device)
+        if self._validate_args:
+            self._validate_sample(value)
+            
+        value, total_count, probs, p = broadcast_all(value, self.total_count, self.probs, self.p)
+        
+        log_p = torch.full(value.shape, torch.nan)
+
+        zeros = value == 0
+        non_zeros = ~zeros
+        
+        if torch.any(zeros):
+            log_p[zeros] = torch.log(p[zeros])
+        
+        if torch.any(non_zeros):
+            log_p[non_zeros] = torch.log(1-p[non_zeros]) + NegativeBinomial(total_count[non_zeros], probs[non_zeros]).log_prob(value[non_zeros] - 1)
+        
+        return log_p
+    
+    def rsample(self, sample_shape=torch.Size()):
+        
+        total_count, probs, p = broadcast_all(self.total_count, self.probs, self.p)
+
+        with torch.no_grad():
+            
+            return torch.bernoulli(torch.broadcast_to(1-p, sample_shape + p.shape))*(1+NegativeBinomial(total_count, probs).sample(sample_shape))
+        
+    def cdf(self, value):
+        
+        raise NotImplementedError
+    
 class Prior():
     
     def __init__(self, distr, map = lambda x: x):
