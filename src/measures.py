@@ -26,13 +26,16 @@ def compute_intermittent_indicators_v2(data):
         adi, cv2 = compute_adi_cv2(data)
     return adi, cv2
 
-def compute_intermittent_indicators(data, na_rm = True):
+def compute_intermittent_indicators(data, h, na_rm = True, zero_rm=True):
     if (isinstance(data, pd.DataFrame)):
         data = data.values
     assert isinstance(data, np.ndarray) and data.ndim == 2
 
-    if na_rm == True:
+    if na_rm:
         data = data[~np.any(np.isnan(data), axis=1),:]
+
+    if zero_rm:
+        data = data[~np.all(data[:,:-h*2] == 0, axis=1)]
     
     adi, cv2 = np.empty(len(data)), np.empty(len(data))
     idx = np.arange(data.shape[1])

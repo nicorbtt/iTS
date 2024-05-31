@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     # Compute intermittent indicators
     logger.log(f"Computing intermittent indicators")
-    adi, cv2 = compute_intermittent_indicators(data_raw)
+    adi, cv2 = compute_intermittent_indicators(data_raw, data_info['h'])
     data_info['intermittent'] = label_intermittent(adi, cv2, f="intermittent")
     data_info['lumpy'] = label_intermittent(adi, cv2, f="lumpy")
 

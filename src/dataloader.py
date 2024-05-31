@@ -61,7 +61,7 @@ def load_raw(dataset_name, datasets_folder_path):
     return(data_raw, data_info)
 
 ### Create {training, validation, testing} datasets in the gluonts format
-def create_datasets(data, data_info, na_rm = True):
+def create_datasets(data, data_info, na_rm = True, zero_rm=True):
     @lru_cache(10_000)
     def convert_to_pandas_period(date, freq):
         return pd.Period(date, freq)
@@ -79,6 +79,8 @@ def create_datasets(data, data_info, na_rm = True):
     # For each ts in the raw data append target, feat_static_cat (i.e., time series id) and start
     for i in range(data.shape[0]):
         if na_rm and np.sum(np.isnan(data.values[i,:])) > 0:
+            continue
+        if zero_rm and np.all(data.values[i,:-h*2]==0):
             continue
         ds_train['target'].append(data.values[i,:-h*2])
         ds_train['feat_static_cat'].append([tsIdInc]); ds_train['item_id'].append(ts_names[i]); ds_train['feat_dynamic_real'].append(None)

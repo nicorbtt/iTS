@@ -46,7 +46,7 @@ class Tweedie(ExponentialFamily):
 
     def __get_log_z(self, y, phi, rho): 
         alpha = self.__get_alpha(rho)
-        return -alpha*torch.log(y) + alpha*torch.log(rho-1) - (2 - rho) - (1-alpha)*torch.log(phi)
+        return -alpha*torch.log(y) + alpha*torch.log(rho-1) - torch.log(2 - rho) - (1-alpha)*torch.log(phi)
 
     
     def __get_log_W(self, alpha, j, constant_log_W, pi):
@@ -79,7 +79,7 @@ class Tweedie(ExponentialFamily):
             raise OverflowError("z growing towards infinity")
         
         j_max = self.__get_jmax(y, phi, rho)
-        constant_log_W = torch.max(log_z) +(1-alpha) + alpha*torch.log(-alpha)
+        constant_log_W = torch.max(log_z) + (1-alpha) + alpha*torch.log(-alpha)
         
         j = max(torch.tensor(1), j_max.max())
 
