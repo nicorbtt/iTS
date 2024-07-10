@@ -195,7 +195,7 @@ def predict(model, batch, device, config):
             future_time_feat = batch['future_time_features'].to(device),
             past_observed_values = batch['past_observed_mask'].to(device),
             num_parallel_samples = config['num_parallel_samples']
-        ).detach().numpy()
+        ).detach().cpu().numpy()
     # TODO rounding
     return(predictions)
 

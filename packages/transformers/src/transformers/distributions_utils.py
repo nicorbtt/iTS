@@ -101,11 +101,12 @@ class Tweedie(ExponentialFamily):
                 break
         j_low = torch.ceil(j)
         
-        j = torch.arange(j_low.item(), j_high.item() + 1)
+        j = torch.arange(j_low.item(), j_high.item() + 1, device=alpha.device)
 
         w1 = torch.tile(j, (log_z.shape[0], 1)).to(torch.float32)
+        w1 = w1.to(alpha.device)
         w1 *= log_z[:, None]
-        w1 -= torch.special.gammaln(j + 1)
+        w1 -= torch.special.gammaln(j + 1,)
 
         log_W = w1 - torch.special.gammaln(-alpha[:, None] * j)
 
@@ -129,7 +130,7 @@ class Tweedie(ExponentialFamily):
         dvc = torch.device(f'cuda:{torch.cuda.current_device()}') if torch.cuda.is_available() else 'cpu'
         torch.set_default_device(dvc)
 
-        log_p = torch.full(value.shape, torch.nan)
+        log_p = torch.full(value.shape, torch.nan, device=mu.device)
 
         zeros = value == 0
         non_zeros = ~zeros
@@ -175,7 +176,7 @@ class Tweedie(ExponentialFamily):
             N = Poisson(rate).sample(sample_shape)
             non_zeros = N > 0
             
-            samples = torch.full(N.shape, torch.nan)
+            samples = torch.full(N.shape, torch.nan, device=alpha.device)
             samples[~non_zeros] = 0
             
             if len(alpha) > 1 and len(alpha) == len(non_zeros):    
@@ -196,7 +197,7 @@ class FixedDispersionTweedie(Tweedie):
     _mean_carrier_measure = 0
 
     def __init__(self, mu, rho, validate_args=None):
-        super().__init__(mu, torch.tensor([1.]), rho, validate_args)
+        super().__init__(mu, torch.tensor([1.], device=mu.device), rho, validate_args)
 
 
 

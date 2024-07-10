@@ -107,22 +107,25 @@ def pinball(actual, pred, l):
     return np.abs(actual-pred)*np.where(actual >= pred, l, 1-l)
 
 # Quantile loss
-def quantile_loss_(target: np.ndarray, forecast: np.ndarray, q: float) -> float:
-    return 2 * np.mean(np.abs((forecast - target) * ((target <= forecast) - q)))
+def quantile_loss_(target: np.ndarray, forecast: np.ndarray, q: float, avg=True) -> float:
+    if avg:
+        return 2 * np.mean(np.abs((forecast - target) * ((target <= forecast) - q)))
+    else:
+        return 2 * np.abs((forecast - target) * ((target <= forecast) - q))
 
-def quantile_loss(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99]):
+def quantile_loss(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
     res = {}
     for q in range(len(quantiles)):
-        res['q'+str(quantiles[q])] = quantile_loss_(target, np.round(forecast[:,:,q]), q=quantiles[q])
+        res['q'+str(quantiles[q])] = quantile_loss_(target, np.round(forecast[:,:,q]), quantiles[q], avg)
     return(res)
 
-def quantile_loss_sample(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99]):
+def quantile_loss_sample(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
     forecast = np.swapaxes(forecast, 1, 2)
     tmp = np.empty(shape=(forecast.shape[0], forecast.shape[1], len(quantiles)))
     for i in range(tmp.shape[0]):
         for j in range(len(quantiles)):
             tmp[i,:,j] = np.round(np.quantile(forecast[i], axis=1, q=quantiles[j]))
-    return(quantile_loss(target, tmp, quantiles))
+    return(quantile_loss(target, tmp, quantiles, avg))
 
 
 def rho_risk_(target: np.ndarray, forecast: np.ndarray, q: float, zero_denom: float) -> float:

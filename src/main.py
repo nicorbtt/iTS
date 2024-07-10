@@ -1,9 +1,12 @@
+import os
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = "1"
+os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = "0.0"
+
 from dataloader import load_raw, create_datasets, create_dataloaders
 from visual import learning_curves, Logger
 from models import ModelConfigBuilder, forward, predict, EarlyStop
 from measures import compute_intermittent_indicators, label_intermittent, quantile_loss_sample, rho_risk_sample
 
-import os
 import sys
 import argparse
 from datetime import datetime
@@ -46,9 +49,9 @@ if __name__ == "__main__":
     torch.use_deterministic_algorithms(mode=True)
 
     # Seting parameters of mini-batch sampling 
-    os.environ.setdefault("GLUONTS_MAX_IDLE_TRANSFORMS", parser.max_idle_transforms)
-    os.environ.setdefault("iTS_sample_zero_percentage", parser.sample_zero_percentage)
-    os.environ.setdefault("iTS_p_sample_zero_percentage_reject", parser.p_reject)
+    os.environ.setdefault("GLUONTS_MAX_IDLE_TRANSFORMS", parser_args.max_idle_transforms)
+    os.environ.setdefault("iTS_sample_zero_percentage", parser_args.sample_zero_percentage)
+    os.environ.setdefault("iTS_p_sample_zero_percentage_reject", parser_args.p_reject)
 
     dt = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
     model_folder_name = (
@@ -136,7 +139,8 @@ if __name__ == "__main__":
                 'distribution_head': model_builder.distribution_head,
                 'scaling': model_builder.scaling,
                 'epoch': epoch,
-                'early_stop': early_stop.stop}, open(os.path.join(model_folder_path, "experiment.json"), "w"))
+                'early_stop': early_stop.stop,
+                'seed':parser_args.seed}, open(os.path.join(model_folder_path, "experiment.json"), "w"))
 
     # Load the model from disk
     logger.log("Loading the model")
@@ -149,14 +153,17 @@ if __name__ == "__main__":
     model.load_state_dict(model_state)
 
     # Prediction
-    logger.log("Generating forecasts")
+    accelerator = Accelerator(cpu=False)
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")  # Check for MPS
+    model.to(device)
+
+    logger.log("Generating forecasts, device="+str(device))
     model.eval()
     forecasts_list = []
     for i, batch in enumerate(test_dataloader):
         logger.log("Batch " + str(i+1) + " out of " + str(len(list(test_dataloader))))
         forecasts_list.append(predict(model, batch, device, CONFIG))
-        forecasts = np.vstack(forecasts_list)
-    #forecasts = np.vstack([predict(model, batch, device, CONFIG) for batch in test_dataloader])
+    forecasts = np.vstack(forecasts_list)
     actuals = np.array([x[FieldName.TARGET][-data_info['h']:] for x in datasets['test']])
     assert actuals.shape[0] == forecasts.shape[0]
     assert actuals.shape[1] == forecasts.shape[2]

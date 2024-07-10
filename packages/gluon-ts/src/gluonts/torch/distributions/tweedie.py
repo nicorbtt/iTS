@@ -174,7 +174,7 @@ class Tweedie(ExponentialFamily):
             N = Poisson(rate).sample(sample_shape)
             non_zeros = N > 0
             
-            samples = torch.full(N.shape, torch.nan)
+            samples = torch.full(N.shape, torch.nan, device=alpha.device)
             samples[~non_zeros] = 0
             
             if len(alpha) > 1 and len(alpha) == len(non_zeros):    
@@ -195,7 +195,7 @@ class FixedDispersionTweedie(Tweedie):
     _mean_carrier_measure = 0
 
     def __init__(self, mu, rho, validate_args=None):
-        super().__init__(mu, torch.tensor([1.]), rho, validate_args)
+        super().__init__(mu, torch.tensor([1.], device=mu.device), rho, validate_args)
 
 class Prior():
     
