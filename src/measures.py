@@ -113,13 +113,13 @@ def quantile_loss_(target: np.ndarray, forecast: np.ndarray, q: float, avg=True)
     else:
         return 2 * np.abs((forecast - target) * ((target <= forecast) - q))
 
-def quantile_loss(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
+def quantile_loss(target: np.ndarray, forecast: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
     res = {}
     for q in range(len(quantiles)):
-        res['q'+str(quantiles[q])] = quantile_loss_(target, np.round(forecast[:,:,q]), quantiles[q], avg)
+        res['QL'+str(int(quantiles[q]*100))] = quantile_loss_(target, np.round(forecast[:,:,q]), quantiles[q], avg)
     return(res)
 
-def quantile_loss_sample(target: np.ndarray, forecast: np.ndarray, quantiles = [0.25, 0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
+def quantile_loss_sample(target: np.ndarray, forecast: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
     forecast = np.swapaxes(forecast, 1, 2)
     tmp = np.empty(shape=(forecast.shape[0], forecast.shape[1], len(quantiles)))
     for i in range(tmp.shape[0]):
