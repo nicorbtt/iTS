@@ -44,7 +44,7 @@ def compute_intermittent_indicators(data, h, na_rm = True, zero_rm=True):
         demand = ts[ts > 0]
         if len(demand) == 0:
             adi[i], cv2[i] = np.nan, np.nan
-        adi[i], cv2[i] = np.mean(demand_idx[1:]-demand_idx[:-1]), (np.std(demand)/np.mean(demand))**2
+        else: adi[i], cv2[i] = np.mean(demand_idx[1:]-demand_idx[:-1]), (np.std(demand)/np.mean(demand))**2
     return adi, cv2
 
 def label_intermittent(adi, cv2, f):
