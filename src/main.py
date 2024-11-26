@@ -29,7 +29,7 @@ if __name__ == "__main__":
         return model_params
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5'], required=True, help='Specify dataset name')
-    parser.add_argument('--model', type=str, choices=['deepAR','transformer'], required=True, help="Specify model")
+    parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'patchTST'], required=True, help="Specify model")
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix', 'tweedie-priors', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
@@ -38,6 +38,7 @@ if __name__ == "__main__":
     parser.add_argument('--silent', '-s', action='store_true', help='Silent, i.e. no verbose')
     parser.add_argument('--log', '-log', action='store_true', help='Whether to save the log')
     parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility, default is 42')
+    parser.add_argument('--cpu', type=bool, default=False, help='Select the device')
     parser.add_argument('--max_idle_transforms', type=str, default="10000", help='(mini-batch sampling) Maximum number of times a transformation can receive an input without returning an output. This parameter is intended to catch infinite loops or inefficiencies, when transformations never or rarely return something, default is 10000')
     parser.add_argument('--sample_zero_percentage', type=str, default="1", help='(mini-batch sampling) Maximum percentage of 0s allowed for each sample, default is 1 (i.e. do not discard anything)')
     parser.add_argument('--p_reject', type=str, default="1", help='(mini-batch sampling) Probability of discard, default is 1 (i.e. discard all)')
@@ -61,7 +62,7 @@ if __name__ == "__main__":
         (parser_args.scaling if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join(os.path.expanduser("~/switchdrive"), "iTS", "trained_models", model_folder_name)
+    model_folder_path = os.path.join(os.getcwd(), "trained_models", model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
     
@@ -94,7 +95,7 @@ if __name__ == "__main__":
     model = model_builder.get_model()
 
     # Training setup
-    accelerator = Accelerator(cpu=True)
+    accelerator = Accelerator(cpu=parser_args.cpu)
     device = accelerator.device
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=6e-4, betas=(0.9, 0.95), weight_decay=1e-1)
@@ -153,8 +154,8 @@ if __name__ == "__main__":
     model.load_state_dict(model_state)
 
     # Prediction
-    accelerator = Accelerator(cpu=False)
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")  # Check for MPS
+    accelerator = Accelerator(cpu=parser_args.cpu)
+    device = accelerator.device
     model.to(device)
 
     logger.log("Generating forecasts, device="+str(device))

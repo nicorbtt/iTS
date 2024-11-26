@@ -15,7 +15,14 @@ from gluonts.torch.distributions import (
     FixedDispersionTweedieOutput,
     ZeroInflatedPoissonOutput
 )
-from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerForPrediction
+from transformers import (
+    TimeSeriesTransformerConfig, 
+    TimeSeriesTransformerForPrediction, 
+    InformerConfig,
+    InformerForPrediction,
+    AutoformerConfig,
+    AutoformerForPrediction
+)
 
 
 
@@ -23,7 +30,7 @@ from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerForPr
 class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
-        assert model in ["deepAR", "transformer"]
+        assert model in ["deepAR", "transformer", "informer", "autoformer"]
         assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix", "tweedie-priors", "zero-inf-pois"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
@@ -39,6 +46,20 @@ class ModelConfigBuilder:
             'encoder_ffn_dim', 'decoder_ffn_dim', 'activation_function', 'dropout', 'encoder_layerdrop', 
             'decoder_layerdrop', 'attention_dropout', 'activation_dropout', 'num_parallel_samples', 
             'init_std', 'use_cache'     
+        }
+        self._TUNABLE_PARAMS_INFORMER = {
+            'context_length', 'prediction_length', 'embedding_dimension','d_model', 
+            'encoder_layers', 'decoder_layers', 'encoder_attention_heads', 'decoder_attention_heads', 
+            'encoder_ffn_dim', 'decoder_ffn_dim', 'activation_function', 'dropout', 'encoder_layerdrop', 
+            'decoder_layerdrop', 'attention_dropout', 'activation_dropout', 'num_parallel_samples', 
+            'init_std', 'use_cache', 'attention_type', 'sampling_factor', 'distil'
+        }
+        self._TUNABLE_PARAMS_AUTOFORMER = {
+            'context_length', 'prediction_length', 'embedding_dimension','d_model', 
+            'encoder_layers', 'decoder_layers', 'encoder_attention_heads', 'decoder_attention_heads', 
+            'encoder_ffn_dim', 'decoder_ffn_dim', 'activation_function', 'dropout', 'encoder_layerdrop', 
+            'decoder_layerdrop', 'attention_dropout', 'activation_dropout', 'num_parallel_samples', 
+            'init_std', 'use_cache', 'label_length', 'moving_average', 'autocorrelation_factor'
         }
         self.params = None
 
@@ -130,6 +151,108 @@ class ModelConfigBuilder:
                 use_cache = _check('use_cache', True),                              # Whether to use the past key/values attentions (if applicable to the model) to speed up decoding
             )
 
+        if self.model == "informer":
+            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_INFORMER):
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DEEPAR}")
+            self.params = InformerConfig(
+                prediction_length = _check('prediction_length', data_info['h']),
+                context_length = _check('context_length', data_info['h']*data_info['w']),
+                distribution_output = {
+                        'poisson' : 'poisson',
+                        'negbin' : 'negative_binomial',
+                        'tweedie' : 'tweedie',
+                        'tweedie-fix' : 'fixed_dispersion_tweedie',
+                        'tweedie-priors' : 'tweedie_with_priors',
+                        'zero-inf-pois' : 'zero_inflated_poisson'
+                    }[self.distribution_head],
+                loss = "nll",
+                input_size = 1,
+                scaling = {
+                        'mase' : 'MASE',
+                        'mean' : 'mean',
+                        'mean-demand' : 'mean demand'
+                    }[self.scaling] if self.scaling else None,
+                lags_sequence = lags_sequence,
+                num_time_features = len(self.time_features) + 1,  # +1 is Age
+                num_dynamic_real_features = 0,
+                num_static_categorical_features = 1,
+                num_static_real_features = 0,
+                cardinality = [data_info['N']],
+                embedding_dimension = _check('embedding_dimension', [3]),
+                
+                # architecture params
+                d_model = _check('d_model', 32),                                    # Dimensionality of the transformer layers                   
+                encoder_layers = _check('encoder_layers', 4),                       # Number of encoder layers              
+                decoder_layers = _check('decoder_layers', 4),                       # Number of decoder layers                                          
+                encoder_attention_heads = _check('encoder_attention_heads', 2),     # Number of attention heads for each attention layer in the Transformer encoder         
+                decoder_attention_heads = _check('decoder_attention_heads', 2),     # Number of attention heads for each attention layer in the Transformer decoder   
+                encoder_ffn_dim = _check('encoder_ffn_dim', 32),                    # Dimension of the “intermediate” (often named feed-forward) layer in encoder                
+                decoder_ffn_dim = _check('decoder_ffn_dim', 32),                    # Dimension of the “intermediate” (often named feed-forward) layer in decoder 
+                activation_function = _check('activation_function', "gelu"),        # The non-linear activation function (function or string) in the encoder and decoder
+                dropout = _check('dropout', 0.1),                                   # The dropout probability for all fully connected layers in the encoder, and decoder
+                encoder_layerdrop = _check('encoder_layerdrop', 0.1),               # The dropout probability for the attention and fully connected layers for each encoder layer  
+                decoder_layerdrop = _check('decoder_layerdrop', 0.1),               # The dropout probability for the attention and fully connected layers for each decoder layer
+                attention_dropout = _check('attention_dropout', 0.1),               # The dropout probability for the attention probabilities
+                activation_dropout = _check('activation_dropout', 0.1),             # The dropout probability used between the two layers of the feed-forward networks
+                num_parallel_samples = _check('num_parallel_samples', 200),         # The number of samples to generate in parallel for each time step of inference
+                init_std = _check('init_std', 0.02),                                # The standard deviation of the truncated normal weight initialization distribution
+                use_cache = _check('use_cache', True),                              # Whether to use the past key/values attentions (if applicable to the model) to speed up decoding
+                attention_type = _check('attention_type', 'prob'),                   
+                sampling_factor = _check('sampling_factor', 5),
+                distil = _check('distil', True)    
+            )
+
+        if self.model == "autoformer":
+            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_TRANSFORMER):
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DEEPAR}")
+            self.params = AutoformerConfig(
+                prediction_length = _check('prediction_length', data_info['h']),
+                context_length = _check('context_length', data_info['h']*data_info['w']),
+                distribution_output = {
+                        'poisson' : 'poisson',
+                        'negbin' : 'negative_binomial',
+                        'tweedie' : 'tweedie',
+                        'tweedie-fix' : 'fixed_dispersion_tweedie',
+                        'tweedie-priors' : 'tweedie_with_priors',
+                        'zero-inf-pois' : 'zero_inflated_poisson'
+                    }[self.distribution_head],
+                loss = "nll",
+                input_size = 1,
+                scaling = {
+                        'mase' : 'MASE',
+                        'mean' : 'mean',
+                        'mean-demand' : 'mean demand'
+                    }[self.scaling] if self.scaling else None,
+                lags_sequence = lags_sequence,
+                num_time_features = len(self.time_features) + 1,  # +1 is Age
+                num_dynamic_real_features = 0,
+                num_static_categorical_features = 1,
+                num_static_real_features = 0,
+                cardinality = [data_info['N']],
+                embedding_dimension = _check('embedding_dimension', [3]),
+                
+                # architecture params
+                d_model = _check('d_model', 32),                                    # Dimensionality of the transformer layers                   
+                encoder_layers = _check('encoder_layers', 4),                       # Number of encoder layers              
+                decoder_layers = _check('decoder_layers', 4),                       # Number of decoder layers                                          
+                encoder_attention_heads = _check('encoder_attention_heads', 2),     # Number of attention heads for each attention layer in the Transformer encoder         
+                decoder_attention_heads = _check('decoder_attention_heads', 2),     # Number of attention heads for each attention layer in the Transformer decoder   
+                encoder_ffn_dim = _check('encoder_ffn_dim', 32),                    # Dimension of the “intermediate” (often named feed-forward) layer in encoder                
+                decoder_ffn_dim = _check('decoder_ffn_dim', 32),                    # Dimension of the “intermediate” (often named feed-forward) layer in decoder 
+                activation_function = _check('activation_function', "gelu"),        # The non-linear activation function (function or string) in the encoder and decoder
+                dropout = _check('dropout', 0.1),                                   # The dropout probability for all fully connected layers in the encoder, and decoder
+                encoder_layerdrop = _check('encoder_layerdrop', 0.1),               # The dropout probability for the attention and fully connected layers for each encoder layer  
+                decoder_layerdrop = _check('decoder_layerdrop', 0.1),               # The dropout probability for the attention and fully connected layers for each decoder layer
+                attention_dropout = _check('attention_dropout', 0.1),               # The dropout probability for the attention probabilities
+                activation_dropout = _check('activation_dropout', 0.1),             # The dropout probability used between the two layers of the feed-forward networks
+                num_parallel_samples = _check('num_parallel_samples', 200),         # The number of samples to generate in parallel for each time step of inference
+                init_std = _check('init_std', 0.02),                                # The standard deviation of the truncated normal weight initialization distribution
+                use_cache = _check('use_cache', True),                              # Whether to use the past key/values attentions (if applicable to the model) to speed up decoding
+                label_length = _check('label_length', 10),
+                moving_average = _check('moving_average', 25),
+                autocorrelation_factor = _check('autocorrelation_factor', 3)
+            )
+
     ### Create Model
     def get_model(self):
         if self.model == "deepAR" : 
@@ -137,6 +260,10 @@ class ModelConfigBuilder:
             return(DeepARModel(**({**self.params, 'num_feat_dynamic_real': tmp, 'num_feat_static_real':1})))
         if self.model == "transformer" : 
             return(TimeSeriesTransformerForPrediction(self.params))
+        if self.model == 'informer':
+            return(InformerForPrediction(self.params))
+        if self.model == 'autoformer':
+            return(AutoformerForPrediction(self.params))
     
     ### Export config
     def export_config(self):
@@ -145,12 +272,37 @@ class ModelConfigBuilder:
             return {key: self.params[key] for key in self._TUNABLE_PARAMS_DEEPAR}
         elif self.model == "transformer":
             return {key: self.params.__dict__[key] for key in self._TUNABLE_PARAMS_TRANSFORMER}
-
+        elif self.model == 'informer':
+            return {key: self.params.__dict__[key] for key in self._TUNABLE_PARAMS_INFORMER}
+        elif self.model == 'autoformer':
+            return {key: self.params.__dict__[key] for key in self._TUNABLE_PARAMS_AUTOFORMER}
 
 ### Forward step
 def forward(model, batch, device, config):
     loss = None
     if isinstance(model, TimeSeriesTransformerForPrediction):
+        loss = model(
+            static_categorical_features=batch["static_categorical_features"].to(device) if config.num_static_categorical_features > 0 else None,
+            static_real_features=batch["static_real_features"].to(device) if config.num_static_real_features > 0 else None,
+            past_time_features=batch["past_time_features"].to(device),
+            past_values=batch["past_values"].to(device),
+            future_time_features=batch["future_time_features"].to(device),
+            future_values=batch["future_values"].to(device),
+            past_observed_mask=batch["past_observed_mask"].to(device),
+            future_observed_mask=batch["future_observed_mask"].to(device),
+        ).loss
+    if isinstance(model, InformerForPrediction):
+        loss = model(
+            static_categorical_features=batch["static_categorical_features"].to(device) if config.num_static_categorical_features > 0 else None,
+            static_real_features=batch["static_real_features"].to(device) if config.num_static_real_features > 0 else None,
+            past_time_features=batch["past_time_features"].to(device),
+            past_values=batch["past_values"].to(device),
+            future_time_features=batch["future_time_features"].to(device),
+            future_values=batch["future_values"].to(device),
+            past_observed_mask=batch["past_observed_mask"].to(device),
+            future_observed_mask=batch["future_observed_mask"].to(device),
+        ).loss
+    if isinstance(model, AutoformerForPrediction):
         loss = model(
             static_categorical_features=batch["static_categorical_features"].to(device) if config.num_static_categorical_features > 0 else None,
             static_real_features=batch["static_real_features"].to(device) if config.num_static_real_features > 0 else None,
@@ -178,6 +330,24 @@ def forward(model, batch, device, config):
 def predict(model, batch, device, config):
     predictions = None
     if isinstance(model, TimeSeriesTransformerForPrediction):
+        predictions = model.generate(
+            static_categorical_features=batch["static_categorical_features"].to(device) if config.num_static_categorical_features > 0 else None,
+            static_real_features=batch["static_real_features"].to(device) if config.num_static_real_features > 0 else None,
+            past_time_features=batch["past_time_features"].to(device),
+            past_values=batch["past_values"].to(device),
+            future_time_features=batch["future_time_features"].to(device),
+            past_observed_mask=batch["past_observed_mask"].to(device),
+        ).sequences.cpu().numpy()
+    if isinstance(model, InformerForPrediction):
+        predictions = model.generate(
+            static_categorical_features=batch["static_categorical_features"].to(device) if config.num_static_categorical_features > 0 else None,
+            static_real_features=batch["static_real_features"].to(device) if config.num_static_real_features > 0 else None,
+            past_time_features=batch["past_time_features"].to(device),
+            past_values=batch["past_values"].to(device),
+            future_time_features=batch["future_time_features"].to(device),
+            past_observed_mask=batch["past_observed_mask"].to(device),
+        ).sequences.cpu().numpy()
+    if isinstance(model, AutoformerForPrediction):
         predictions = model.generate(
             static_categorical_features=batch["static_categorical_features"].to(device) if config.num_static_categorical_features > 0 else None,
             static_real_features=batch["static_real_features"].to(device) if config.num_static_real_features > 0 else None,
