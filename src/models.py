@@ -105,7 +105,7 @@ class ModelConfigBuilder:
 
         if self.model == "transformer":
             if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_TRANSFORMER):
-                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DEEPAR}")
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_TRANSFORMER}")
             self.params = TimeSeriesTransformerConfig(
                 prediction_length = _check('prediction_length', data_info['h']),
                 context_length = _check('context_length', data_info['h']*data_info['w']),
@@ -153,7 +153,7 @@ class ModelConfigBuilder:
 
         if self.model == "informer":
             if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_INFORMER):
-                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DEEPAR}")
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_INFORMER}")
             self.params = InformerConfig(
                 prediction_length = _check('prediction_length', data_info['h']),
                 context_length = _check('context_length', data_info['h']*data_info['w']),
@@ -203,8 +203,8 @@ class ModelConfigBuilder:
             )
 
         if self.model == "autoformer":
-            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_TRANSFORMER):
-                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DEEPAR}")
+            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_AUTOFORMER):
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_AUTOFORMER}")
             self.params = AutoformerConfig(
                 prediction_length = _check('prediction_length', data_info['h']),
                 context_length = _check('context_length', data_info['h']*data_info['w']),
