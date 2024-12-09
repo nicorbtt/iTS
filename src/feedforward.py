@@ -1,23 +1,32 @@
 import os
+import os
 os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = "1"
 os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = "0.0"
 
+import sys
+import numpy as np
+
 from dataloader import load_raw, create_datasets, create_dataloaders
 from visual import learning_curves, Logger
-from models import ModelConfigBuilder, forward, predict, EarlyStop
-from measures import compute_intermittent_indicators, label_intermittent, quantile_loss_sample, rho_risk_sample
+from models import EarlyStop
+from measures import compute_intermittent_indicators, label_intermittent, quantile_loss
 
-import sys
+from gluonts.torch.model.simple_feedforward import SimpleFeedForwardModel
+from gluonts.torch.distributions import (
+    PoissonOutput,
+    NegativeBinomialOutput, 
+    TweedieOutput, 
+    ZeroInflatedNegativeBinomialOutput
+)
+from gluonts.dataset.field_names import FieldName
+
 import argparse
 from datetime import datetime
-import numpy as np
 import json
+import random
 import torch
-from gluonts.dataset.field_names import FieldName
 from accelerate import Accelerator
 from torch.optim import AdamW
-import random
-
 
 if __name__ == "__main__":
     # Command line parser
@@ -29,9 +38,9 @@ if __name__ == "__main__":
         return model_params
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5'], required=True, help='Specify dataset name')
-    parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer'], required=True, help="Specify model")
-    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix', 'tweedie-priors', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
-    parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
+    parser.add_argument('--lag', type=int, required=True, help="Specify lag")
+    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'zinb', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
+    parser.add_argument('--scaling', type=str, default=None, choices=['mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
     parser.add_argument('--num_epochs', type=int, default=int(1e4), help='Specify max training epochs, default is 1e4')
     parser.add_argument('--batch_size', type=int, default=128, help='Specify batch size, default is 128')
@@ -56,10 +65,10 @@ if __name__ == "__main__":
 
     dt = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
     model_folder_name = (
-        parser_args.model + "__" +
+        "feedforward_l" + str(parser_args.lag) + "__" +
         parser_args.dataset_name + "__" +
         parser_args.distribution_head + "__" +
-        (parser_args.scaling if parser_args.scaling else "none") + "__" +
+        ("mean-demand" if parser_args.scaling else "none") + "__" +
         dt
     )
     model_folder_path = os.path.join("/trained_models", model_folder_name)
@@ -80,66 +89,89 @@ if __name__ == "__main__":
     data_info['lumpy'] = label_intermittent(adi, cv2, f="lumpy")
 
     # Create Datasets (train, valid, test) objects
+    logger.log("Preparing dataset")
     datasets = create_datasets(data_raw, data_info)
+    config = {k:0 for k in ['num_feat_static_cat' , 'num_feat_static_real', 'num_feat_dynamic_real']}
+    config["prediction_length"] = data_info['h']
+    config["context_length"] = parser_args.lag
+    train_dataloader, valid_dataloader, test_dataloader = create_dataloaders(config, datasets, data_info, batch_size=parser_args.batch_size)
 
-    # Model config
-    model_builder = ModelConfigBuilder(model=parser_args.model, distribution_head=parser_args.distribution_head, scaling=parser_args.scaling)
-    loaded_params = json.load(open(parser_args.model_params)) if parser_args.model_params else {}
-    model_builder.build(data_info, **loaded_params)
-    CONFIG = model_builder.params
-
-    # Dataloaders
-    train_dataloader, valid_dataloader, test_dataloader = create_dataloaders(CONFIG, datasets, data_info, batch_size=parser_args.batch_size)
-
-    # Build the model
     logger.log(f"Building the model")
-    model = model_builder.get_model()
-
-    # Training setup
+    def ff_builder(distribution_head, scaling, prediction_length, context_length):
+        if distribution_head == "tweedie":
+            distr_output = TweedieOutput()
+        elif distribution_head == "negbin":
+            distr_output = NegativeBinomialOutput()
+        elif distribution_head == "zinb":
+            distr_output = ZeroInflatedNegativeBinomialOutput()
+        elif distribution_head == "poisson":
+            distr_output = PoissonOutput()
+        else:
+            raise ValueError(f"Distribution head {distribution_head} not found")
+        return SimpleFeedForwardModel(
+            scale = scaling,
+            prediction_length = prediction_length,
+            context_length = context_length,
+            hidden_dimensions= [32, 32, 32, 32, 32], 
+            distr_output = distr_output,
+            batch_norm = False,
+        )
+    
+    model = ff_builder(parser_args.distribution_head, parser_args.scaling, data_info['h'], parser_args.lag)
     accelerator = Accelerator(cpu=parser_args.cpu)
     device = accelerator.device
     model.to(device)
-    optimizer = AdamW(model.parameters(), lr=6e-4, betas=(0.9, 0.95), weight_decay=1e-1)
-    model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(model, optimizer, train_dataloader, valid_dataloader)
+    optimizer = AdamW(model.parameters(), lr=1e-4, betas=(0.9, 0.95), weight_decay=1e-8)
+    #model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(model, optimizer, train_dataloader, valid_dataloader)
     early_stop = EarlyStop(logger, patience=20, min_delta=1e-3)
 
     # Training loop
     history = { 'train_loss': [], 'val_loss': []}
     logger.log(f'Training on device={device}')
-    for epoch in range(parser_args.num_epochs):
+    for epoch in range(parser_args.num_epochs): 
         # 1. Training
-        train_loss = 0.0
+        train_loss = 0
         model.train()
         for idx, batch in enumerate(train_dataloader):
             optimizer.zero_grad()
-            loss = forward(model, batch, device, CONFIG)
+            loss = model.loss(
+                past_target = batch['past_values'].to(device),
+                future_target = batch['future_values'].to(device),
+                future_observed_values = batch['future_observed_mask'].to(device),
+            ).mean()
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # Gradient clipping
             train_loss += loss.item()
-            accelerator.backward(loss); optimizer.step()
+            accelerator.backward(loss)
+            optimizer.step()
         history['train_loss'].append(train_loss / idx)
         # 2. Validation
-        val_loss = 0.0
+        val_loss = 0
         model.eval()
         with torch.no_grad():
             for idx, batch in enumerate(valid_dataloader):
-                loss = forward(model, batch, device, CONFIG)
+                loss = model.loss(
+                    past_target = batch['past_values'].to(device),
+                    future_target = batch['future_values'].to(device),
+                    future_observed_values = batch['future_observed_mask'].to(device),
+                ).mean()
                 val_loss += loss.item()
         history['val_loss'].append(val_loss / idx)
         logger.log_epoch(epoch, history)
-        # 3. Early Stopping
+        # 3. Early stopping
         early_stop.update(model, epoch, history['val_loss'][-1])
         if early_stop.stop: break
 
-    
-    # 5. Plot of Learning curves
-    learning_curves(history, path=model_folder_path, likelihood=model_builder.distribution_head, scaling=model_builder.scaling)
-    # 6. Save the model and params
+    # 4. Save informations and modelss
     torch.save(early_stop.best_model, os.path.join(model_folder_path, "model_state.model"))
-    json.dump(model_builder.export_config(), open(os.path.join(model_folder_path, "model_params.json"), "w"))
+    json.dump({"scaling" : parser_args.scaling,
+               "prediction_length" : data_info["h"],
+               "context_length" : parser_args.lag,
+               "distribution_head" : parser_args.distribution_head}, open(os.path.join(model_folder_path, "model_params.json"), "w"))
     json.dump({'datetime': dt, 
                 'dataset': parser_args.dataset_name, 
-                'model': model_builder.model,
-                'distribution_head': model_builder.distribution_head,
-                'scaling': model_builder.scaling,
+                'lag' : parser_args.lag,
+                'distribution_head': parser_args.distribution_head,
+                'scaling': parser_args.scaling,
                 'epoch': epoch,
                 'early_stop': early_stop.stop,
                 'seed':parser_args.seed}, open(os.path.join(model_folder_path, "experiment.json"), "w"))
@@ -149,9 +181,7 @@ if __name__ == "__main__":
     model_params = json.load(open(os.path.join(model_folder_path, "model_params.json"), "r"))
     model_state = torch.load(os.path.join(model_folder_path, "model_state.model"))
     experiment_info = json.load(open(os.path.join(model_folder_path, "experiment.json"), "r"))
-    model_builder = ModelConfigBuilder(model=experiment_info['model'], distribution_head=experiment_info['distribution_head'], scaling=experiment_info['scaling'])
-    model_builder.build(data_info, **model_params)
-    model = model_builder.get_model()
+    model = ff_builder(**model_params)
     model.load_state_dict(model_state)
 
     # Prediction
@@ -161,33 +191,31 @@ if __name__ == "__main__":
 
     logger.log("Generating forecasts, device="+str(device))
     model.eval()
-    forecasts_list = []
+    quantile_forecasts_list = []
+    actuals = np.array([x[FieldName.TARGET][-data_info['h']:] for x in datasets['test']])
     for i, batch in enumerate(test_dataloader):
         logger.log("Batch " + str(i+1) + " out of " + str(len(list(test_dataloader))))
-        forecasts_list.append(predict(model, batch, device, CONFIG))
-    forecasts = np.vstack(forecasts_list)
-    actuals = np.array([x[FieldName.TARGET][-data_info['h']:] for x in datasets['test']])
-    assert actuals.shape[0] == forecasts.shape[0]
-    assert actuals.shape[1] == forecasts.shape[2]
-    assert forecasts.ndim == 3
-
-    np.save(os.path.join(model_folder_path,"actuals.npy"), actuals)
-    np.save(os.path.join(model_folder_path,"forecasts.npy"), forecasts)
+        with torch.no_grad():
+            distr_args, loc, scale = model(batch['past_values'].to(device))
+            distribution = model.distr_output.distribution(distr_args, loc=loc, scale=scale)
+            samples = distribution.sample(torch.Size([10000]))
+            quantile_forecasts_list.append(
+                torch.quantile(samples.cpu(), torch.tensor([0.5, 0.8, 0.9, 0.95, 0.99]), axis=0).permute(1,2,0).numpy()
+                )
+    quantile_forecasts = np.concatenate(quantile_forecasts_list, axis=0)
+    assert actuals.shape[0] == quantile_forecasts.shape[0]
+    assert actuals.shape[1] == quantile_forecasts.shape[1]
+    assert quantile_forecasts.ndim == 3
 
     # Quantile Loss
     logger.log("Computing performance measures")
     idx_intermittent = np.logical_and(adi >= 1.32, cv2 < .49)
     idx_intermittent_and_lumpy = adi >= 1.32
-    metrics = {'quantile_loss' : {'all' : quantile_loss_sample(actuals, forecasts),
-                                   'intermittent' : quantile_loss_sample(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:]),
-                                   'intermittent_and_lumpy' : quantile_loss_sample(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:])},
-               'rho_risk_nan' : {'all' : rho_risk_sample(actuals, forecasts, zero_denom = np.nan),
-                                 'intermittent' : rho_risk_sample(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:], zero_denom = np.nan),
-                                 'intermittent_and_lumpy' : rho_risk_sample(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:], zero_denom = np.nan)},
-               'rho_risk_1' : {'all' : rho_risk_sample(actuals, forecasts, zero_denom = 1.),
-                               'intermittent' : rho_risk_sample(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:], zero_denom = 1.),
-                               'intermittent_and_lumpy' : rho_risk_sample(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:], zero_denom = 1.)}}
+    metrics = {'quantile_loss' : {'all' : quantile_loss(actuals, quantile_forecasts),
+                                   'intermittent' : quantile_loss(actuals[idx_intermittent,:], quantile_forecasts[idx_intermittent,:,:]),
+                                   'intermittent_and_lumpy' : quantile_loss(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:])}
+    }
     json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"))
-
     logger.log(f"End. Find results in {model_folder_path}")
     logger.off()
+            

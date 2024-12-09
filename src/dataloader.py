@@ -224,7 +224,7 @@ def create_instance_splitter(
         start_field=FieldName.START,
         forecast_start_field=FieldName.FORECAST_START,
         instance_sampler=instance_sampler,
-        past_length=config['context_length'] + max(config['lags_sequence']),
+        past_length=config['context_length'] + (max(config['lags_sequence']) if 'lags_sequence' in config.keys() else 0),
         future_length=config["prediction_length"],
         time_series_fields=["time_features", "observed_mask"],
     )
