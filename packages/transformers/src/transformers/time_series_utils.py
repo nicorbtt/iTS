@@ -34,8 +34,8 @@ from torch.distributions import (
 from .distributions_utils import (
     Tweedie, 
     FixedDispersionTweedie, 
-    TweedieWithPriors,
-    ZeroInflatedPoisson
+    ZeroInflatedNegativeBinomial,
+    ZeroInflatedPoisson,
 )
 
 class AffineTransformed(TransformedDistribution):
@@ -281,31 +281,6 @@ class FixedDispersionTweedieOutput(DistributionOutput):
         return ()
 
 
-class TweedieWithPriorsOutput(DistributionOutput):
-
-    args_dim: Dict[str, int] = {"mu": 1, "phi": 1, "rho":1}
-    distribution_class: type = TweedieWithPriors
-
-    @classmethod
-    def domain_map(cls, mu: torch.Tensor, phi: torch.Tensor, rho: torch.Tensor):
-        mu = cls.squareplus(mu).clamp_min(torch.finfo(mu.dtype).eps)
-        phi = cls.squareplus(phi).clamp_min(torch.finfo(phi.dtype).eps)
-        rho = (1+rho.sigmoid()).clamp(1+torch.finfo(rho.dtype).eps, 2-torch.finfo(rho.dtype).eps)
-        
-        return mu.squeeze(-1), phi.squeeze(-1), rho.squeeze(-1)
-    
-    def _base_distribution(self, distr_args) -> Distribution:
-        mu, phi, rho = distr_args
-        if self.dim == 1:
-            return self.distribution_class(mu=mu, phi=phi, rho=rho)
-        else:
-            return Independent(self.distribution_class(mu=mu, phi=phi, rho=rho), 1)
-        
-    @property
-    def event_shape(self) -> Tuple:
-        return ()
-
-
 class PoissonOutput(DistributionOutput):
 
     args_dim: Dict[str, int] = {"rate": 1}
@@ -361,3 +336,34 @@ class ZeroInflatedPoissonOutput(DistributionOutput):
 
         return self._base_distribution((rate, p))
   
+
+class ZeroInflatedNegativeBinomialOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"total_count": 1, "probs":1, "p_zero":1}
+    distribution_class: type = ZeroInflatedNegativeBinomial
+
+    @classmethod
+    def domain_map(cls, total_count: torch.Tensor, probs: torch.Tensor, p_zero: torch.Tensor):
+        total_count = cls.squareplus(total_count).clamp_min(torch.finfo(total_count.dtype).eps)
+        probs = probs.sigmoid().clamp(torch.finfo(probs.dtype).eps, 1-torch.finfo(probs.dtype).eps)
+        p_zero = probs.sigmoid().clamp(torch.finfo(p_zero.dtype).eps, 1-torch.finfo(p_zero.dtype).eps)
+        return  total_count.squeeze(-1), probs.squeeze(-1), p_zero.squeeze(-1)
+    
+    def _base_distribution(self, distr_args) -> Distribution:
+        total_count, probs, p_zero = distr_args
+        if self.dim == 1:
+            return self.distribution_class(total_count=total_count, probs=probs, p_zero=p_zero)
+        else:
+            return Independent(self.distribution_class(total_count=total_count, probs=probs, p_zero=p_zero), 1)
+        
+    def distribution(
+        self, distr_args, loc: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None
+    ) -> Distribution:
+        total_count, probs, p_zero = distr_args
+
+        if scale is not None:   
+            mu = total_count*probs/(1-probs)
+            logits = torch.logit(self.probs)
+            logits += ((scale*(1. + mu) -1.)/mu).log()
+            probs = logits.exp()/(1. + logits.exp())
+
+        return self._base_distribution((total_count, probs, p_zero))
