@@ -44,13 +44,15 @@ DATASETS_METADATA = {
     'Auto'          : {'N': 3000,   'L': 24,    'h': 6,     'freq' : 'M', 'start' : '2010-01-01', 'w' : 2},
     'RAF'           : {'N': 5000,   'L': 84,    'h': 12,    'freq' : 'M', 'start' : '1996-01-01', 'w' : 3},
     'carparts'      : {'N': 2509,   'L': 51,    'h': 6,     'freq' : 'M', 'start' : '1998-01-01', 'w' : 2},
-    'syph'          : {'N': 67,     'L': 209,   'h': 8,     'freq' : 'W', 'start' : '2007-01-01', 'w' : 2},
+    'syph'          : {'N': 67,     'L': 209,   'h': 13,     'freq' : 'W', 'start' : '2007-01-01', 'w' : 4},
     'M5'            : {'N': 30490,  'L': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4},
+    'M5weekly'      : {'N': 30490,  'L': 282,   'h': 13,    'freq' : 'W', 'start' : '2011-01-27', 'w' : 4},
+    'OnlineRetailweekly'  : {'N': 2489,   'L':53,   'h':13,    'freq' : 'D', 'start' : '2010-12-01', 'w' : 2}
 }
 
 ### Import raw data from disk
 def load_raw(dataset_name, datasets_folder_path):
-    assert dataset_name in ["OnlineRetail", "Auto", 'RAF', 'carparts', 'syph', 'M5']
+    assert dataset_name in ["OnlineRetail", "Auto", 'RAF', 'carparts', 'syph', 'M5', 'M5weekly', 'OnlineRetailweekly']
     data_raw = pd.read_csv(os.path.join(datasets_folder_path, dataset_name, "data.csv"))
     data_info = {
         'h' : DATASETS_METADATA[dataset_name]['h'],
@@ -61,7 +63,7 @@ def load_raw(dataset_name, datasets_folder_path):
     return(data_raw, data_info)
 
 ### Create {training, validation, testing} datasets in the gluonts format
-def create_datasets(data, data_info, na_rm = True, zero_rm=True):
+def create_datasets(data, data_info, na_rm = True, zero_rm=True, zero_id = False):
     @lru_cache(10_000)
     def convert_to_pandas_period(date, freq):
         return pd.Period(date, freq)
@@ -88,7 +90,8 @@ def create_datasets(data, data_info, na_rm = True, zero_rm=True):
         ds_valid['feat_static_cat'].append([tsIdInc]); ds_valid['item_id'].append(ts_names[i]); ds_valid['feat_dynamic_real'].append(None)
         ds_test['target'].append(data.values[i,:])
         ds_test['feat_static_cat'].append([tsIdInc]); ds_test['item_id'].append(ts_names[i]); ds_test['feat_dynamic_real'].append(None)
-        tsIdInc = tsIdInc + 1
+        if not zero_id:
+            tsIdInc = tsIdInc + 1
     ds_train['start'] = [start_dt]*len(ds_train['target'])
     ds_valid['start'] = [start_dt]*len(ds_valid['target'])
     ds_test['start']  = [start_dt]*len(ds_test['target'])
@@ -128,7 +131,7 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                 AsNumpyArray(
                     field=FieldName.FEAT_STATIC_CAT,
                     expected_ndim=1,
-                    dtype=int,
+                    dtype=int
                 )
             ]
             if config['num_static_categorical_features'] > 0

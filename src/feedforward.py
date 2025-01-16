@@ -1,5 +1,4 @@
 import os
-import os
 os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = "1"
 os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = "0.0"
 
@@ -9,7 +8,7 @@ import numpy as np
 from dataloader import load_raw, create_datasets, create_dataloaders
 from visual import learning_curves, Logger
 from models import EarlyStop
-from measures import compute_intermittent_indicators, label_intermittent, quantile_loss
+from measures import compute_intermittent_indicators, label_intermittent, quantile_loss, quantile_loss_, brier_score
 
 from gluonts.torch.model.simple_feedforward import SimpleFeedForwardModel
 from gluonts.torch.distributions import (
@@ -71,7 +70,7 @@ if __name__ == "__main__":
         ("mean-demand" if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join("/trained_models", model_folder_name)
+    model_folder_path = os.path.join(os.getcwd(), "trained_models", model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
     
@@ -191,21 +190,31 @@ if __name__ == "__main__":
 
     logger.log("Generating forecasts, device="+str(device))
     model.eval()
-    quantile_forecasts_list = []
+    quantile_forecasts_list, probs0_list = [], []
     actuals = np.array([x[FieldName.TARGET][-data_info['h']:] for x in datasets['test']])
     for i, batch in enumerate(test_dataloader):
         logger.log("Batch " + str(i+1) + " out of " + str(len(list(test_dataloader))))
         with torch.no_grad():
             distr_args, loc, scale = model(batch['past_values'].to(device))
             distribution = model.distr_output.distribution(distr_args, loc=loc, scale=scale)
-            samples = distribution.sample(torch.Size([10000]))
+            samples = distribution.sample(torch.Size([10000])).cpu()
             quantile_forecasts_list.append(
-                torch.quantile(samples.cpu(), torch.tensor([0.5, 0.8, 0.9, 0.95, 0.99]), axis=0).permute(1,2,0).numpy()
+                torch.quantile(samples, torch.tensor([0.5, 0.8, 0.9, 0.95, 0.99]), axis=0).permute(1,2,0).numpy()
+                )
+            probs0_list.append(
+                (samples == 0).to(torch.float32).mean(axis=0).numpy()
                 )
     quantile_forecasts = np.concatenate(quantile_forecasts_list, axis=0)
+    probs0 = np.concatenate(probs0_list, axis=0)
     assert actuals.shape[0] == quantile_forecasts.shape[0]
     assert actuals.shape[1] == quantile_forecasts.shape[1]
     assert quantile_forecasts.ndim == 3
+    assert actuals.shape == probs0.shape 
+    for k, q in enumerate([0.5, 0.8, 0.9, 0.95, 0.99]):
+        ql = quantile_loss_(actuals, quantile_forecasts[:,:,k], q, avg=False).mean(axis=1)
+        np.save(os.path.join(model_folder_path,"ql_"+str(q)+".npy"), ql)
+    if parser_args.lag == 1:
+        np.save(os.path.join(model_folder_path,"actuals.npy"), actuals)
 
     # Quantile Loss
     logger.log("Computing performance measures")
@@ -213,7 +222,10 @@ if __name__ == "__main__":
     idx_intermittent_and_lumpy = adi >= 1.32
     metrics = {'quantile_loss' : {'all' : quantile_loss(actuals, quantile_forecasts),
                                    'intermittent' : quantile_loss(actuals[idx_intermittent,:], quantile_forecasts[idx_intermittent,:,:]),
-                                   'intermittent_and_lumpy' : quantile_loss(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:])}
+                                   'intermittent_and_lumpy' : quantile_loss(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:])},
+               'brier_score' : {'all' : brier_score(actuals, probs0),
+                                   'intermittent' : brier_score(actuals[idx_intermittent,:], probs0[idx_intermittent,:]),
+                                   'intermittent_and_lumpy' : brier_score(actuals[idx_intermittent_and_lumpy,:], probs0[idx_intermittent_and_lumpy,:])}
     }
     json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"))
     logger.log(f"End. Find results in {model_folder_path}")

@@ -18,7 +18,6 @@ from accelerate import Accelerator
 from torch.optim import AdamW
 import random
 
-
 if __name__ == "__main__":
     # Command line parser
     def json_file_path(model_params):
@@ -30,7 +29,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5'], required=True, help='Specify dataset name')
     parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer'], required=True, help="Specify model")
-    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'tweedie-fix', 'tweedie-priors', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
+    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'zinb'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
     parser.add_argument('--num_epochs', type=int, default=int(1e4), help='Specify max training epochs, default is 1e4')
@@ -39,6 +38,7 @@ if __name__ == "__main__":
     parser.add_argument('--log', '-log', action='store_true', help='Whether to save the log')
     parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility, default is 42')
     parser.add_argument('--cpu', type=bool, default=False, help='Select the device')
+    parser.add_argument('--zero_shot_training_dataset', type=str, default=None, help='Specify a different dataset for training')
     parser.add_argument('--max_idle_transforms', type=str, default="10000", help='(mini-batch sampling) Maximum number of times a transformation can receive an input without returning an output. This parameter is intended to catch infinite loops or inefficiencies, when transformations never or rarely return something, default is 10000')
     parser.add_argument('--sample_zero_percentage', type=str, default="1", help='(mini-batch sampling) Maximum percentage of 0s allowed for each sample, default is 1 (i.e. do not discard anything)')
     parser.add_argument('--p_reject', type=str, default="1", help='(mini-batch sampling) Probability of discard, default is 1 (i.e. discard all)')
@@ -62,7 +62,7 @@ if __name__ == "__main__":
         (parser_args.scaling if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join("/trained_models", model_folder_name)
+    model_folder_path = os.path.join(os.getcwd(), "trained_models", model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
     
@@ -70,8 +70,9 @@ if __name__ == "__main__":
     logger = Logger(disable=parser_args.silent, stdout=stdout)
     logger.log(f"Random seed={parser_args.seed}")
     # Import data
-    logger.log(f"Loading dataset {parser_args.dataset_name}")
-    data_raw, data_info = load_raw(dataset_name=parser_args.dataset_name, datasets_folder_path=os.path.join("data"))
+    training_dataset = parser_args.zero_shot_training_dataset if parser_args.zero_shot_training_dataset is not None else parser_args.dataset_name
+    logger.log(f"Loading dataset {training_dataset}")
+    data_raw, data_info = load_raw(dataset_name=training_dataset, datasets_folder_path=os.path.join("data"))
 
     # Compute intermittent indicators
     logger.log(f"Computing intermittent indicators")
@@ -80,7 +81,7 @@ if __name__ == "__main__":
     data_info['lumpy'] = label_intermittent(adi, cv2, f="lumpy")
 
     # Create Datasets (train, valid, test) objects
-    datasets = create_datasets(data_raw, data_info)
+    datasets = create_datasets(data_raw, data_info, zero_id = False if parser_args.zero_shot_training_dataset is None else True)
 
     # Model config
     model_builder = ModelConfigBuilder(model=parser_args.model, distribution_head=parser_args.distribution_head, scaling=parser_args.scaling)
@@ -159,6 +160,15 @@ if __name__ == "__main__":
     device = accelerator.device
     model.to(device)
 
+    if parser_args.zero_shot_training_dataset is not None:
+        logger.log(f"Loading dataset {training_dataset}")
+        data_raw, data_info = load_raw(dataset_name=parser_args.dataset_name, datasets_folder_path=os.path.join("data"))
+        adi, cv2 = compute_intermittent_indicators(data_raw, data_info['h'])
+        data_info['intermittent'] = label_intermittent(adi, cv2, f="intermittent")
+        data_info['lumpy'] = label_intermittent(adi, cv2, f="lumpy")
+        datasets = create_datasets(data_raw, data_info, zero_id = True)
+        train_dataloader, valid_dataloader, test_dataloader = create_dataloaders(CONFIG, datasets, data_info, batch_size=parser_args.batch_size)
+
     logger.log("Generating forecasts, device="+str(device))
     model.eval()
     forecasts_list = []
@@ -191,3 +201,5 @@ if __name__ == "__main__":
 
     logger.log(f"End. Find results in {model_folder_path}")
     logger.off()
+
+    #--dataset_name syph --distribution_head negbin --model deepAR --cpu True --scaling mean-demand --zero_shot_training_dataset M5weekly --num_epochs 1
