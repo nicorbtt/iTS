@@ -46,13 +46,16 @@ DATASETS_METADATA = {
     'carparts'      : {'N': 2509,   'L': 51,    'h': 6,     'freq' : 'M', 'start' : '1998-01-01', 'w' : 2},
     'syph'          : {'N': 67,     'L': 209,   'h': 13,     'freq' : 'W', 'start' : '2007-01-01', 'w' : 4},
     'M5'            : {'N': 30490,  'L': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4},
+    'crime'         : {'N': 271,    'L': 204,   'h': 12,    'freq' : 'M', 'start' : '2003-01-01', 'w':2},
     'M5weekly'      : {'N': 30490,  'L': 282,   'h': 13,    'freq' : 'W', 'start' : '2011-01-27', 'w' : 4},
     'OnlineRetailweekly'  : {'N': 2489,   'L':53,   'h':13,    'freq' : 'D', 'start' : '2010-12-01', 'w' : 2}
+
 }
 
 ### Import raw data from disk
 def load_raw(dataset_name, datasets_folder_path):
-    assert dataset_name in ["OnlineRetail", "Auto", 'RAF', 'carparts', 'syph', 'M5', 'M5weekly', 'OnlineRetailweekly']
+    assert dataset_name in ["OnlineRetail", "Auto", 'RAF', 'carparts', 'syph', 'M5', 'crime', 
+                            'M5weekly', 'OnlineRetailweekly']
     data_raw = pd.read_csv(os.path.join(datasets_folder_path, dataset_name, "data.csv"))
     data_info = {
         'h' : DATASETS_METADATA[dataset_name]['h'],
@@ -106,7 +109,7 @@ def create_datasets(data, data_info, na_rm = True, zero_rm=True, zero_id = False
     dataset['valid'].set_transform(partial(transform_start_field, freq=data_info['freq']))
     dataset['test'].set_transform(partial(transform_start_field, freq=data_info['freq']))
 
-    data_info['N'] = len(dataset['train'])
+    data_info['N'] = len(dataset['train']) if not zero_id else 1
     return(dataset)
 
 ### Transformations Chain

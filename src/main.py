@@ -27,7 +27,7 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError("File must have a .json extension")
         return model_params
     parser = argparse.ArgumentParser(description="iTS")
-    parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5'], required=True, help='Specify dataset name')
+    parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'crime'], required=True, help='Specify dataset name')
     parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer'], required=True, help="Specify model")
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'zinb'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
@@ -70,9 +70,8 @@ if __name__ == "__main__":
     logger = Logger(disable=parser_args.silent, stdout=stdout)
     logger.log(f"Random seed={parser_args.seed}")
     # Import data
-    training_dataset = parser_args.zero_shot_training_dataset if parser_args.zero_shot_training_dataset is not None else parser_args.dataset_name
-    logger.log(f"Loading dataset {training_dataset}")
-    data_raw, data_info = load_raw(dataset_name=training_dataset, datasets_folder_path=os.path.join("data"))
+    logger.log(f"Loading dataset {parser_args.dataset_name}")
+    data_raw, data_info = load_raw(dataset_name=parser_args.dataset_name, datasets_folder_path=os.path.join("data"))
 
     # Compute intermittent indicators
     logger.log(f"Computing intermittent indicators")
@@ -80,6 +79,14 @@ if __name__ == "__main__":
     data_info['intermittent'] = label_intermittent(adi, cv2, f="intermittent")
     data_info['lumpy'] = label_intermittent(adi, cv2, f="lumpy")
 
+    # If required, create the additional dataset
+    if parser_args.zero_shot_training_dataset is not None:
+        logger.log(f"Loading training dataset {parser_args.zero_shot_training_dataset}")
+        train_data_raw, train_data_info = load_raw(dataset_name=parser_args.zero_shot_training_dataset, datasets_folder_path=os.path.join("data"))
+        assert train_data_info['freq'] == data_info['freq']
+        train_data_info['h'], train_data_info['w'] = data_info['h'], data_info['w']
+        train_datasets = create_datasets(train_data_raw, train_data_info, zero_id = True)
+        
     # Create Datasets (train, valid, test) objects
     datasets = create_datasets(data_raw, data_info, zero_id = False if parser_args.zero_shot_training_dataset is None else True)
 
@@ -91,6 +98,8 @@ if __name__ == "__main__":
 
     # Dataloaders
     train_dataloader, valid_dataloader, test_dataloader = create_dataloaders(CONFIG, datasets, data_info, batch_size=parser_args.batch_size)
+    if parser_args.dataset_name is not None:
+        train_dataloader, valid_dataloader, _ = create_dataloaders(CONFIG, train_datasets, train_data_info, batch_size=parser_args.batch_size)
 
     # Build the model
     logger.log(f"Building the model")
@@ -160,15 +169,6 @@ if __name__ == "__main__":
     device = accelerator.device
     model.to(device)
 
-    if parser_args.zero_shot_training_dataset is not None:
-        logger.log(f"Loading dataset {training_dataset}")
-        data_raw, data_info = load_raw(dataset_name=parser_args.dataset_name, datasets_folder_path=os.path.join("data"))
-        adi, cv2 = compute_intermittent_indicators(data_raw, data_info['h'])
-        data_info['intermittent'] = label_intermittent(adi, cv2, f="intermittent")
-        data_info['lumpy'] = label_intermittent(adi, cv2, f="lumpy")
-        datasets = create_datasets(data_raw, data_info, zero_id = True)
-        train_dataloader, valid_dataloader, test_dataloader = create_dataloaders(CONFIG, datasets, data_info, batch_size=parser_args.batch_size)
-
     logger.log("Generating forecasts, device="+str(device))
     model.eval()
     forecasts_list = []
@@ -202,4 +202,4 @@ if __name__ == "__main__":
     logger.log(f"End. Find results in {model_folder_path}")
     logger.off()
 
-    #--dataset_name syph --distribution_head negbin --model deepAR --cpu True --scaling mean-demand --zero_shot_training_dataset M5weekly --num_epochs 1
+    #--dataset_name crime --distribution_head zinb --model deepAR --scaling mean-demand --cpu True --zero_shot_training_dataset Auto --num_epochs 1 
