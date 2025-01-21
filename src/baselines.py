@@ -45,7 +45,7 @@ if __name__ == "__main__":
     dt = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
     dataset_name = sys.argv[1]
 
-    data_raw, data_info = load_raw(dataset_name=dataset_name, datasets_folder_path=os.path.join("..","data"))
+    data_raw, data_info = load_raw(dataset_name=dataset_name, datasets_folder_path=os.path.join(os.getcwd(),"data"))
     datasets = create_datasets(data_raw, data_info)
     adi, cv2 = compute_intermittent_indicators(data_raw, data_info['h']) 
     idx_intermittent = np.logical_and(adi >= 1.32, cv2 < .49)

@@ -13,7 +13,8 @@ from gluonts.torch.distributions import (
     TweedieOutput, 
     TweedieWithPriorsOutput,
     FixedDispersionTweedieOutput,
-    ZeroInflatedPoissonOutput
+    ZeroInflatedPoissonOutput,
+    ZeroInflatedNegativeBinomialOutput,
 )
 from transformers import (
     TimeSeriesTransformerConfig, 
@@ -31,7 +32,7 @@ class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
         assert model in ["deepAR", "transformer", "informer", "autoformer"]
-        assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix", "tweedie-priors", "zero-inf-pois"]
+        assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix", "tweedie-priors", "zero-inf-pois", "zinb"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
         self.distribution_head = distribution_head
@@ -91,7 +92,8 @@ class ModelConfigBuilder:
                         'tweedie' : TweedieOutput(),
                         'tweedie-fix' : FixedDispersionTweedieOutput(),
                         'tweedie-priors' : TweedieWithPriorsOutput(),
-                        'zero-inf-pois' : ZeroInflatedPoissonOutput()
+                        'zero-inf-pois' : ZeroInflatedPoissonOutput(),
+                        'zinb' : ZeroInflatedNegativeBinomialOutput()
                     }[self.distribution_head],
                 'lags_seq' : lags_sequence,
                 'scaling' : {
@@ -115,7 +117,8 @@ class ModelConfigBuilder:
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed_dispersion_tweedie',
                         'tweedie-priors' : 'tweedie_with_priors',
-                        'zero-inf-pois' : 'zero_inflated_poisson'
+                        'zero-inf-pois' : 'zero_inflated_poisson',
+                        'zinb' : 'zero_inflated_negative_binomial',
                     }[self.distribution_head],
                 loss = "nll",
                 input_size = 1,
@@ -163,7 +166,8 @@ class ModelConfigBuilder:
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed_dispersion_tweedie',
                         'tweedie-priors' : 'tweedie_with_priors',
-                        'zero-inf-pois' : 'zero_inflated_poisson'
+                        'zero-inf-pois' : 'zero_inflated_poisson',
+                        'zinb' : 'zero_inflated_negative_binomial'
                     }[self.distribution_head],
                 loss = "nll",
                 input_size = 1,
@@ -214,7 +218,8 @@ class ModelConfigBuilder:
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed_dispersion_tweedie',
                         'tweedie-priors' : 'tweedie_with_priors',
-                        'zero-inf-pois' : 'zero_inflated_poisson'
+                        'zero-inf-pois' : 'zero_inflated_poisson',
+                        'zinb' : 'zero_inflated_negative_binomial'
                     }[self.distribution_head],
                 loss = "nll",
                 input_size = 1,

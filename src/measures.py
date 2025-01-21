@@ -127,6 +127,12 @@ def quantile_loss_sample(target: np.ndarray, forecast: np.ndarray, quantiles = [
             tmp[i,:,j] = np.round(np.quantile(forecast[i], axis=1, q=quantiles[j]))
     return(quantile_loss(target, tmp, quantiles, avg))
 
+def brier_score(target: np.ndarray, forecast: np.ndarray, avg=True) -> float: #forecast = prob(0)
+    if avg:
+        return float(np.mean((forecast - (target==0))**2))
+    else:
+        return (forecast - (target==0))**2
+
 
 def rho_risk_(target: np.ndarray, forecast: np.ndarray, q: float, zero_denom: float) -> float:
     quantile_loss = 2 * np.sum(np.abs((forecast - target) * ((target <= forecast) - q)), axis=1)
