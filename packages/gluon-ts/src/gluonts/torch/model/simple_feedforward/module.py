@@ -61,7 +61,7 @@ class SimpleFeedForwardModel(nn.Module):
     @validated()
     def __init__(
         self,
-        scale: bool,
+        scale: Optional[str],
         prediction_length: int,
         context_length: int,
         hidden_dimensions: Optional[List[int]] = None,
@@ -117,8 +117,10 @@ class SimpleFeedForwardModel(nn.Module):
         self,
         past_target: torch.Tensor,
     ) -> Tuple[Tuple[torch.Tensor, ...], torch.Tensor, torch.Tensor]:
-        if self.scale:
-            s = mean_demand_scaling(past_target)       
+        if self.scale == "mean-demand":
+            s = mean_demand_scaling(past_target)  
+        elif self.scale == "mean":
+            s = mean_abs_scaling(past_target)     
         else:
             s = torch.ones((past_target.shape[0],1))
         scaled_context = past_target / s
@@ -127,7 +129,7 @@ class SimpleFeedForwardModel(nn.Module):
             -1, self.prediction_length, self.hidden_dimensions[-1]
         )
         distr_args = self.args_proj(nn_out_reshaped)
-        return distr_args, torch.zeros((past_target.shape[0],1)), s
+        return distr_args, torch.zeros((past_target.shape[0],1), device=s.device), s
 
     def loss(
         self,

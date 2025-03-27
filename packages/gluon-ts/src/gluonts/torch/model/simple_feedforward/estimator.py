@@ -93,7 +93,7 @@ class SimpleFeedForwardEstimator(PyTorchLightningEstimator):
     def __init__(
         self,
         prediction_length: int,
-        scale: bool = False,
+        scale: str = Optional[str],
         context_length: Optional[int] = None,
         hidden_dimensions: Optional[List[int]] = None,
         lr: float = 1e-3,
