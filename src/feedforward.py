@@ -36,7 +36,7 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError("File must have a .json extension")
         return model_params
     parser = argparse.ArgumentParser(description="iTS")
-    parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5'], required=True, help='Specify dataset name')
+    parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'VN1'], required=True, help='Specify dataset name')
     parser.add_argument('--lag', type=int, required=True, help="Specify lag")
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'zinb', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mean', 'mean-demand', None], help="Specify scaling, default is None")
@@ -57,11 +57,6 @@ if __name__ == "__main__":
     torch.manual_seed(parser_args.seed)
     torch.use_deterministic_algorithms(mode=parser_args.cpu)
 
-    # Seting parameters of mini-batch sampling 
-    os.environ.setdefault("GLUONTS_MAX_IDLE_TRANSFORMS", parser_args.max_idle_transforms)
-    os.environ.setdefault("iTS_sample_zero_percentage", parser_args.sample_zero_percentage)
-    os.environ.setdefault("iTS_p_sample_zero_percentage_reject", parser_args.p_reject)
-
     dt = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
     model_folder_name = (
         "feedforward_l" + str(parser_args.lag) + "__" +
@@ -70,7 +65,7 @@ if __name__ == "__main__":
         ("mean-demand" if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join(os.getcwd(), "trained_models", model_folder_name)
+    model_folder_path = os.path.join("/trained_models", model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
     
