@@ -47,6 +47,7 @@ from .tweedie import (
     FixedDispersionTweedieOutput,
 )
 from .zero_inflated_poisson import ZeroInflatedPoisson, ZeroInflatedPoissonOutput
+from .zero_inflated_negative_binomial import ZeroInflatedNegativeBinomial, ZeroInflatedNegativeBinomialOutput
 
 __all__ = [
     "AffineTransformed",
@@ -79,8 +80,8 @@ __all__ = [
     "TruncatedNormalOutput",
     "Tweedie",
     "TweedieOutput",
-    "TweedieWithPriors",
-    "TweedieWithPriorsOutput",
+    "ZeroInflatedNegativeBinomial",
+    "ZeroInflatedNegativeBinomialOutput",
     "ZeroInflatedPoisson",
     "ZeroInflatedPoissonOutput"
 ]
