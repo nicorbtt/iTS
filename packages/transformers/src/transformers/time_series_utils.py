@@ -35,7 +35,7 @@ from .distributions_utils import (
     Tweedie, 
     FixedDispersionTweedie, 
     ZeroInflatedNegativeBinomial,
-    ZeroInflatedPoisson,
+    ZeroInflatedPoisson
 )
 
 class AffineTransformed(TransformedDistribution):
@@ -338,32 +338,30 @@ class ZeroInflatedPoissonOutput(DistributionOutput):
   
 
 class ZeroInflatedNegativeBinomialOutput(DistributionOutput):
-    args_dim: Dict[str, int] = {"total_count": 1, "probs":1, "p_zero":1}
+    args_dim: Dict[str, int] = {"total_count": 1, "logits":1, "p_zero":1}
     distribution_class: type = ZeroInflatedNegativeBinomial
 
     @classmethod
-    def domain_map(cls, total_count: torch.Tensor, probs: torch.Tensor, p_zero: torch.Tensor):
-        total_count = cls.squareplus(total_count).clamp_min(torch.finfo(total_count.dtype).eps)
-        probs = probs.sigmoid().clamp(torch.finfo(probs.dtype).eps, 1-torch.finfo(probs.dtype).eps)
-        p_zero = probs.sigmoid().clamp(torch.finfo(p_zero.dtype).eps, 1-torch.finfo(p_zero.dtype).eps)
-        return  total_count.squeeze(-1), probs.squeeze(-1), p_zero.squeeze(-1)
+    def domain_map(cls, total_count: torch.Tensor, logits: torch.Tensor, p_zero: torch.Tensor):
+        total_count = cls.squareplus(total_count)
+        p_zero = p_zero.sigmoid().clamp(torch.finfo(p_zero.dtype).eps, 1-torch.finfo(p_zero.dtype).eps)
+        return  total_count.squeeze(-1), logits.squeeze(-1), p_zero.squeeze(-1)
     
     def _base_distribution(self, distr_args) -> Distribution:
-        total_count, probs, p_zero = distr_args
+        total_count, logits, p_zero = distr_args
         if self.dim == 1:
-            return self.distribution_class(total_count=total_count, probs=probs, p_zero=p_zero)
+            return self.distribution_class(total_count=total_count, logits=logits, p_zero=p_zero)
         else:
-            return Independent(self.distribution_class(total_count=total_count, probs=probs, p_zero=p_zero), 1)
-        
+            return Independent(self.distribution_class(total_count=total_count, logits=logits, p_zero=p_zero), 1)
+    
     def distribution(
-        self, distr_args, loc: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None
+            self, distr_args, loc: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None
     ) -> Distribution:
-        total_count, probs, p_zero = distr_args
+        total_count, logits, p_zero = distr_args
 
-        if scale is not None:   
-            mu = total_count*probs/(1-probs)
-            logits = torch.logit(self.probs)
+        if scale is not None: 
+            mu = total_count*torch.exp(logits)  
             logits += ((scale*(1. + mu) -1.)/mu).log()
-            probs = logits.exp()/(1. + logits.exp())
 
-        return self._base_distribution((total_count, probs, p_zero))
+        return self._base_distribution((total_count, logits, p_zero))
+    

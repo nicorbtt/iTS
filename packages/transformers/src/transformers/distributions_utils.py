@@ -228,7 +228,7 @@ class ZeroInflatedPoisson(ExponentialFamily):
 class ZeroInflatedNegativeBinomial(ExponentialFamily):
 
     arg_constraints = {"total_count": constraints.nonnegative,
-                       "probs": constraints.interval(0,1),
+                       "logits": constraints.real,
                        "p_zero": constraints.interval(0,1)}
     support = constraints.nonnegative
     has_rsample = True
@@ -236,15 +236,15 @@ class ZeroInflatedNegativeBinomial(ExponentialFamily):
     
     @property
     def mean(self):
-        return (1-self.p_zero)*self.total_count*self.probs/(1 - self.probs)
+        raise NotImplementedError()
         
     @property
     def variance(self):
         raise NotImplementedError()
     
-    def __init__(self, total_count, probs, p_zero, validate_args=None):
-        self.total_count, self.probs, self.p_zero = broadcast_all(total_count, probs, p_zero)
-        if isinstance(total_count, Number) and isinstance(probs, Number) and isinstance(p_zero, Number):
+    def __init__(self, total_count, logits, p_zero, validate_args=None):
+        self.total_count, self.logits, self.p_zero = broadcast_all(total_count, logits, p_zero)
+        if isinstance(total_count, Number) and isinstance(logits, Number) and isinstance(p_zero, Number):
             batch_shape = torch.Size()
         else:
             batch_shape = self.total_count.size()
@@ -256,9 +256,9 @@ class ZeroInflatedNegativeBinomial(ExponentialFamily):
         if self._validate_args:
             self._validate_sample(value)
             
-        value, total_count, probs, p_zero = broadcast_all(value, self.total_count, self.probs, self.p_zero)
+        value, total_count, logits, p_zero = broadcast_all(value, self.total_count, self.logits, self.p_zero)
         
-        log_p = torch.full(value.shape, torch.nan)
+        log_p = torch.full(value.shape, torch.nan, device = value.device)
 
         zeros = value == 0
         non_zeros = ~zeros
@@ -267,14 +267,17 @@ class ZeroInflatedNegativeBinomial(ExponentialFamily):
             log_p[zeros] = torch.log(p_zero[zeros])
         
         if torch.any(non_zeros):
-            log_p[non_zeros] = torch.log(1-p_zero[non_zeros]) + NegativeBinomial(total_count[non_zeros], probs[non_zeros]).log_prob(value[non_zeros] - 1)
+            log_p[non_zeros] = torch.log(1-p_zero[non_zeros]) + NegativeBinomial(total_count=total_count[non_zeros], 
+                                                                                 logits=logits[non_zeros]).log_prob(value[non_zeros] - 1)
         
         return log_p
     
     def rsample(self, sample_shape=torch.Size()):
         
-        total_count, probs, p_zero = broadcast_all(self.total_count, self.probs, self.p_zero)
+        total_count, logits, p_zero = broadcast_all(self.total_count, self.logits, self.p_zero)
 
         with torch.no_grad():
             
-            return torch.bernoulli(torch.broadcast_to(1-p_zero, sample_shape + p_zero.shape))*(1+NegativeBinomial(total_count, probs).sample(sample_shape))
+            return torch.bernoulli(torch.broadcast_to(1-p_zero, sample_shape + p_zero.shape))*(1+NegativeBinomial(total_count=total_count, 
+                                                                                                                  logits=logits).sample(sample_shape))
+        
