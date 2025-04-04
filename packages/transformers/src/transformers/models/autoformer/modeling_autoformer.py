@@ -42,6 +42,7 @@ from ...time_series_utils import (
     FixedDispersionTweedieOutput,
     PoissonOutput,
     ZeroInflatedPoissonOutput,
+    ZeroInflatedNegativeBinomialOutput,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_autoformer import AutoformerConfig
@@ -1900,6 +1901,8 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             self.distribution_output = PoissonOutput(dim=config.input_size)
         elif config.distribution_output == "zero_inflated_poisson":
             self.distribution_output = ZeroInflatedPoissonOutput(dim=config.input_size)
+        elif config.distribution_output == "zero_inflated_negative_binomial":
+            self.distribution_output = ZeroInflatedNegativeBinomialOutput(dim=config.input_size)
         else:
             raise ValueError(f"Unknown distribution output {config.distribution_output}")
 

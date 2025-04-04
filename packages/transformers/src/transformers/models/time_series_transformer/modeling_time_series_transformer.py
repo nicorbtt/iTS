@@ -37,7 +37,6 @@ from ...time_series_utils import (
     StudentTOutput,
     TweedieOutput,
     FixedDispersionTweedieOutput,
-    TweedieWithPriorsOutput,
     PoissonOutput,
     ZeroInflatedPoissonOutput,
 )
@@ -1574,8 +1573,6 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             self.distribution_output = TweedieOutput()
         elif config.distribution_output == "fixed_dispersion_tweedie":
             self.distribution_output = FixedDispersionTweedieOutput()
-        elif config.distribution_output == "tweedie_with_priors":
-            self.distribution_output = TweedieWithPriorsOutput()
         elif config.distribution_output == "poisson":
             self.distribution_output = PoissonOutput()
         elif config.distribution_output == "zero_inflated_poisson":
