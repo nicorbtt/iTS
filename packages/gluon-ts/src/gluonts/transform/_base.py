@@ -191,8 +191,8 @@ class FlatMapTransformation(Transformation):
             result = self.flatmap_transform(data_entry.copy(), is_train)
             for x in result:
                 # Do not include samples with lot of 0s
-                if (np.mean(x['past_values']==0) > self.sample_zero_percentage) & (np.random.rand() < self.p_sample_zero_percentage_reject): 
-                    continue
+#                if (np.mean(x['past_values']==0) > self.sample_zero_percentage) & (np.random.rand() < self.p_sample_zero_percentage_reject): 
+#                   continue
                 num_idle_transforms = 0
                 yield x
 
