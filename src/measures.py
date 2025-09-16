@@ -102,10 +102,6 @@ def drps(actual, samples, lower=None, upper=None):
                             (np.arange(lower, upper+1) >= actual[i]).astype(float))**2)
                              for i in range(len(actual))])
 
-# Pinball loss (e.g., l=0.95)
-def pinball(actual, pred, l):
-    return np.abs(actual-pred)*np.where(actual >= pred, l, 1-l)
-
 # Quantile loss
 def quantile_loss_(target: np.ndarray, forecast: np.ndarray, q: float, avg=True) -> float:
     if avg:
@@ -115,17 +111,46 @@ def quantile_loss_(target: np.ndarray, forecast: np.ndarray, q: float, avg=True)
 
 def quantile_loss(target: np.ndarray, forecast: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
     res = {}
-    for q in range(len(quantiles)):
-        res['QL'+str(int(quantiles[q]*100))] = quantile_loss_(target, np.round(forecast[:,:,q]), quantiles[q], avg)
+    for j in range(len(quantiles)):
+        res['q'+str(quantiles[j])] = quantile_loss_(target, np.round(forecast[:,:,j]), quantiles[j], avg)
     return(res)
 
-def quantile_loss_sample(target: np.ndarray, forecast: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
+def quantile_loss_S(target: np.ndarray, forecast: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
     forecast = np.swapaxes(forecast, 1, 2)
     tmp = np.empty(shape=(forecast.shape[0], forecast.shape[1], len(quantiles)))
     for i in range(tmp.shape[0]):
         for j in range(len(quantiles)):
             tmp[i,:,j] = np.round(np.quantile(forecast[i], axis=1, q=quantiles[j]))
     return(quantile_loss(target, tmp, quantiles, avg))
+
+def quantile_loss_scaled_in_sample(target: np.ndarray, forecast: np.ndarray, insample: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
+    res = {}
+    for j in range(len(quantiles)):
+        scaling = np.mean(quantile_loss_(insample, np.tile(np.quantile(insample, quantiles[j], axis=1)[:, None], (1, insample.shape[1])), quantiles[j], avg=False), axis=1)[:, None]
+        res['q'+str(quantiles[j])] = quantile_loss_(target/scaling, np.round(forecast[:,:,j])/scaling, quantiles[j], avg = avg)
+    return(res)
+
+def quantile_loss_scaled_in_sample_S(target: np.ndarray, forecast: np.ndarray, insample: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
+    forecast = np.swapaxes(forecast, 1, 2)
+    tmp = np.empty(shape=(forecast.shape[0], forecast.shape[1], len(quantiles)))
+    for i in range(tmp.shape[0]):
+        for j in range(len(quantiles)):
+            tmp[i,:,j] = np.round(np.quantile(forecast[i], axis=1, q=quantiles[j]))
+    return(quantile_loss_scaled_in_sample(target, tmp, insample, quantiles, avg))
+
+def rmsse(target: np.ndarray, forecast: np.ndarray, insample: np.ndarray, avg=True):
+    denom = np.mean((insample[:,1:] - insample[:,:-1])**2, axis=1)
+    num = np.mean((target - forecast)**2, axis=1)
+    if avg:
+        return np.mean(np.sqrt(num/denom))
+    else:
+        return np.sqrt(num/denom)
+
+def rmsse_S(target: np.ndarray, forecast: np.ndarray, insample: np.ndarray, avg=True):
+    tmp = np.mean(forecast, axis=1)
+    return(rmsse(target, tmp, insample, avg))
+
+
 
 def brier_score(target: np.ndarray, forecast: np.ndarray, avg=True) -> float: #forecast = prob(0)
     if avg:
