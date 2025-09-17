@@ -8,9 +8,9 @@ import numpy as np
 from dataloader import load_raw, create_datasets, create_dataloaders
 from visual import learning_curves, Logger
 from models import EarlyStop
-from measures import compute_intermittent_indicators, label_intermittent, quantile_loss, quantile_loss_, quantile_loss_scaled_in_sample, rmsse
+from measures import compute_intermittent_indicators, label_intermittent, quantile_loss, quantile_loss_, rmsse, quantile_loss_scaled_in_sample
 
-from gluonts.torch.model.simple_feedforward import SimpleFeedForwardModel
+from gluonts.torch.model.d_linear import DLinearModel
 from gluonts.torch.distributions import (
     PoissonOutput,
     NegativeBinomialOutput, 
@@ -36,7 +36,8 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError("File must have a .json extension")
         return model_params
     parser = argparse.ArgumentParser(description="iTS")
-    parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'VN1', 'UCI'], required=True, help='Specify dataset name')
+    parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'VN1', 'UCI'],
+                         required=True, help='Specify dataset name')
     parser.add_argument('--lag', type=int, required=True, help="Specify lag")
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'zinb', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mean', 'mean-demand', None], help="Specify scaling, default is None")
@@ -59,7 +60,7 @@ if __name__ == "__main__":
 
     dt = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
     model_folder_name = (
-        "feedforward_l" + str(parser_args.lag) + "__" +
+        "dlinear_l" + str(parser_args.lag) + "__" +
         parser_args.dataset_name + "__" +
         parser_args.distribution_head + "__" +
         ("mean-demand" if parser_args.scaling else "none") + "__" +
@@ -102,13 +103,12 @@ if __name__ == "__main__":
             distr_output = PoissonOutput()
         else:
             raise ValueError(f"Distribution head {distribution_head} not found")
-        return SimpleFeedForwardModel(
-            scale = scaling,
+        return DLinearModel(
+            scaling = scaling,
             prediction_length = prediction_length,
             context_length = context_length,
-            hidden_dimensions= [32, 32, 32, 32, 32], 
+            hidden_dimension = 32, 
             distr_output = distr_output,
-            batch_norm = False,
         )
     
     model = ff_builder(parser_args.distribution_head, parser_args.scaling, data_info['h'], parser_args.lag)
@@ -131,6 +131,7 @@ if __name__ == "__main__":
             loss = model.loss(
                 past_target = batch['past_values'].to(device),
                 future_target = batch['future_values'].to(device),
+                past_observed_values = batch['past_observed_mask'].to(device),
                 future_observed_values = batch['future_observed_mask'].to(device),
             ).mean()
             #torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # Gradient clipping
@@ -146,6 +147,7 @@ if __name__ == "__main__":
                 loss = model.loss(
                     past_target = batch['past_values'].to(device),
                     future_target = batch['future_values'].to(device),
+                    past_observed_values = batch['past_observed_mask'].to(device),
                     future_observed_values = batch['future_observed_mask'].to(device),
                 ).mean()
                 val_loss += loss.item()
@@ -191,7 +193,10 @@ if __name__ == "__main__":
     for i, batch in enumerate(test_dataloader):
         logger.log("Batch " + str(i+1) + " out of " + str(len(list(test_dataloader))))
         with torch.no_grad():
-            distr_args, loc, scale = model(batch['past_values'].to(device))
+            distr_args, loc, scale = model(
+                batch['past_values'].to(device),
+                past_observed_values = batch['past_observed_mask'].to(device)
+                )
             distribution = model.distr_output.distribution(distr_args, loc=loc, scale=scale)
             samples = distribution.sample(torch.Size([10000])).cpu()
             quantile_forecasts_list.append(
@@ -235,8 +240,7 @@ if __name__ == "__main__":
             'non_smooth' : rmsse(actuals[non_smooth,:], mean_forecasts[non_smooth,:], insample[non_smooth,:])         
             }
     }
-
-    json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"), indent=4)
+    json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"))
     logger.log(f"End. Find results in {model_folder_path}")
     logger.off()
-          
+            
