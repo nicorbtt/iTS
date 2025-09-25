@@ -170,6 +170,7 @@ if __name__ == "__main__":
                 'scaling': parser_args.scaling,
                 'epoch': epoch,
                 'early_stop': early_stop.stop,
+                'validation_best': early_stop.best_val_loss,
                 'seed':parser_args.seed}, open(os.path.join(model_folder_path, "experiment.json"), "w"))
 
     # Load the model from disk
@@ -225,22 +226,21 @@ if __name__ == "__main__":
             'all' : quantile_loss(actuals, quantile_forecasts),
             'intermittent' : quantile_loss(actuals[idx_intermittent,:], quantile_forecasts[idx_intermittent,:,:]),
             'intermittent_and_lumpy' : quantile_loss(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:]),
-            'non_smooth' : quantile_loss(actuals[non_smooth,:], quantile_forecasts[non_smooth,:,:])         
+            'non-smooth' : quantile_loss(actuals[non_smooth,:], quantile_forecasts[non_smooth,:,:])         
             },
         'quantile_loss_scaled_in_sample' : {
             'all' : quantile_loss_scaled_in_sample(actuals, quantile_forecasts, insample),
             'intermittent' : quantile_loss_scaled_in_sample(actuals[idx_intermittent,:], quantile_forecasts[idx_intermittent,:,:], insample[idx_intermittent,:]),
             'intermittent_and_lumpy' : quantile_loss_scaled_in_sample(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
-            'non_smooth' : quantile_loss_scaled_in_sample(actuals[non_smooth,:], quantile_forecasts[non_smooth,:,:], insample[non_smooth,:])         
+            'non-smooth' : quantile_loss_scaled_in_sample(actuals[non_smooth,:], quantile_forecasts[non_smooth,:,:], insample[non_smooth,:])         
             },          
         'rmsse': {
             'all' : rmsse(actuals, mean_forecasts, insample),
             'intermittent' : rmsse(actuals[idx_intermittent,:], mean_forecasts[idx_intermittent,:], insample[idx_intermittent,:]),
             'intermittent_and_lumpy' : rmsse(actuals[idx_intermittent_and_lumpy,:], mean_forecasts[idx_intermittent_and_lumpy,:], insample[idx_intermittent_and_lumpy,:]),
-            'non_smooth' : rmsse(actuals[non_smooth,:], mean_forecasts[non_smooth,:], insample[non_smooth,:])         
+            'non-smooth' : rmsse(actuals[non_smooth,:], mean_forecasts[non_smooth,:], insample[non_smooth,:])         
             }
     }
     json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"))
     logger.log(f"End. Find results in {model_folder_path}")
     logger.off()
-            

@@ -62,7 +62,7 @@ if __name__ == "__main__":
         (parser_args.scaling if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join("trained_models", model_folder_name)
+    model_folder_path = os.path.join("/trained_models", model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
     
@@ -152,6 +152,7 @@ if __name__ == "__main__":
                 'scaling': model_builder.scaling,
                 'epoch': epoch,
                 'early_stop': early_stop.stop,
+                'validation_best': early_stop.best_val_loss,
                 'seed':parser_args.seed}, open(os.path.join(model_folder_path, "experiment.json"), "w"))
 
     # Load the model from disk
@@ -195,19 +196,19 @@ if __name__ == "__main__":
             'all' : quantile_loss_S(actuals, forecasts),
             'intermittent' : quantile_loss_S(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:]),
             'intermittent_and_lumpy' : quantile_loss_S(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:]),
-            'non_smooth': quantile_loss_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:])
+            'non-smooth': quantile_loss_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:])
             },
         'quantile_loss_scaled_in_sample': {
             'all' : quantile_loss_scaled_in_sample_S(actuals, forecasts, insample),
             'intermittent' : quantile_loss_scaled_in_sample_S(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:], insample[idx_intermittent,:]),
             'intermittent_and_lumpy' : quantile_loss_scaled_in_sample_S(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
-            'non_smooth': quantile_loss_scaled_in_sample_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
+            'non-smooth': quantile_loss_scaled_in_sample_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
             },  
         'rmsse': {
             'all' : rmsse_S(actuals, forecasts, insample),   
             'intermittent' : rmsse_S(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:], insample[idx_intermittent,:]),
             'intermittent_and_lumpy' : rmsse_S(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
-            'non_smooth': rmsse_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
+            'non-smooth': rmsse_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
             }
         }
                
