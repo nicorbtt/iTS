@@ -38,7 +38,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'VN1', 'UCI'], required=True, help='Specify dataset name')
     parser.add_argument('--lag', type=int, required=True, help="Specify lag")
-    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'zinb', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
+    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'hsnb', 'zip'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
     parser.add_argument('--num_epochs', type=int, default=int(1e4), help='Specify max training epochs, default is 1e4')
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         ("mean-demand" if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join("trained_models", model_folder_name)
+    model_folder_path = os.path.join(os.getcwd(), "trained_models", model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
     

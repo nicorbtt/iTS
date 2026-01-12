@@ -34,8 +34,8 @@ from torch.distributions import (
 from .distributions_utils import (
     Tweedie, 
     FixedDispersionTweedie, 
-    ZeroInflatedNegativeBinomial,
-    ZeroInflatedPoisson
+    HurdleShiftedNegativeBinomial,
+    HurdleShiftedPoisson
 )
 
 class AffineTransformed(TransformedDistribution):
@@ -309,9 +309,9 @@ class PoissonOutput(DistributionOutput):
         return self._base_distribution((rate))
     
 
-class ZeroInflatedPoissonOutput(DistributionOutput):
+class HurdleShiftedPoissonOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"rate": 1, "p":1}
-    distribution_class: type = ZeroInflatedPoisson
+    distribution_class: type = HurdleShiftedPoisson
 
     @classmethod
     def domain_map(cls, rate: torch.Tensor, p: torch.Tensor):
@@ -337,9 +337,9 @@ class ZeroInflatedPoissonOutput(DistributionOutput):
         return self._base_distribution((rate, p))
   
 
-class ZeroInflatedNegativeBinomialOutput(DistributionOutput):
+class HurdleShiftedNegativeBinomialOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"total_count": 1, "logits":1, "p_zero":1}
-    distribution_class: type = ZeroInflatedNegativeBinomial
+    distribution_class: type = HurdleShiftedNegativeBinomial
 
     @classmethod
     def domain_map(cls, total_count: torch.Tensor, logits: torch.Tensor, p_zero: torch.Tensor):

@@ -62,7 +62,7 @@ if __name__ == "__main__":
         (parser_args.scaling if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join("/trained_models", model_folder_name)
+    model_folder_path = os.path.join(os.getcwd(), "trained_models", model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
     

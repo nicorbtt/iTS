@@ -168,7 +168,7 @@ class FixedDispersionTweedie(Tweedie):
 
 
 
-class ZeroInflatedPoisson(ExponentialFamily):
+class HurdleShiftedPoisson(ExponentialFamily):
 
     arg_constraints = {"rate": constraints.nonnegative,
                        "p": constraints.interval(0,1)}
@@ -225,7 +225,7 @@ class ZeroInflatedPoisson(ExponentialFamily):
         raise NotImplementedError
     
 
-class ZeroInflatedNegativeBinomial(ExponentialFamily):
+class HurdleShiftedNegativeBinomial(ExponentialFamily):
 
     arg_constraints = {"total_count": constraints.nonnegative,
                        "logits": constraints.real,

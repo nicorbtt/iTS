@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'VN1', 'UCI'],
                          required=True, help='Specify dataset name')
     parser.add_argument('--lag', type=int, required=True, help="Specify lag")
-    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'zinb', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
+    parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'hsnb', 'zero-inf-pois'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
     parser.add_argument('--num_epochs', type=int, default=int(1e4), help='Specify max training epochs, default is 1e4')
@@ -51,6 +51,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_idle_transforms', type=str, default="10000", help='(mini-batch sampling) Maximum number of times a transformation can receive an input without returning an output. This parameter is intended to catch infinite loops or inefficiencies, when transformations never or rarely return something, default is 10000')
     parser.add_argument('--sample_zero_percentage', type=str, default="1", help='(mini-batch sampling) Maximum percentage of 0s allowed for each sample, default is 1 (i.e. do not discard anything)')
     parser.add_argument('--p_reject', type=str, default="1", help='(mini-batch sampling) Probability of discard, default is 1 (i.e. discard all)')
+    parser.add_argument('--kernel_size', type=int, default=None, help='Kenrel size in the D-Linear model')
     parser_args = parser.parse_args()
 
     # Set seed (everywhere)
@@ -66,7 +67,7 @@ if __name__ == "__main__":
         ("mean-demand" if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join("trained_models", model_folder_name)
+    model_folder_path = os.path.join(os.getcwd(), "trained_models", model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
     
@@ -92,12 +93,12 @@ if __name__ == "__main__":
     train_dataloader, valid_dataloader, test_dataloader = create_dataloaders(config, datasets, data_info, batch_size=parser_args.batch_size)
 
     logger.log(f"Building the model")
-    def ff_builder(distribution_head, scaling, prediction_length, context_length):
+    def ff_builder(distribution_head, scaling, prediction_length, context_length, kernel_size):
         if distribution_head == "tweedie":
             distr_output = TweedieOutput()
         elif distribution_head == "negbin":
             distr_output = NegativeBinomialOutput()
-        elif distribution_head == "zinb":
+        elif distribution_head == "hsnb":
             distr_output = ZeroInflatedNegativeBinomialOutput()
         elif distribution_head == "poisson":
             distr_output = PoissonOutput()
@@ -109,9 +110,10 @@ if __name__ == "__main__":
             context_length = context_length,
             hidden_dimension = 32, 
             distr_output = distr_output,
+            kernel_size= kernel_size if kernel_size is not None else 25,
         )
     
-    model = ff_builder(parser_args.distribution_head, parser_args.scaling, data_info['h'], parser_args.lag)
+    model = ff_builder(parser_args.distribution_head, parser_args.scaling, data_info['h'], parser_args.lag, parser_args.kernel_size)
     accelerator = Accelerator(cpu=parser_args.cpu)
     device = accelerator.device
     model.to(device)
@@ -162,7 +164,9 @@ if __name__ == "__main__":
     json.dump({"scaling" : parser_args.scaling,
                "prediction_length" : data_info["h"],
                "context_length" : parser_args.lag,
-               "distribution_head" : parser_args.distribution_head}, open(os.path.join(model_folder_path, "model_params.json"), "w"))
+               "distribution_head" : parser_args.distribution_head,
+               'kernel_size': parser_args.kernel_size}, 
+               open(os.path.join(model_folder_path, "model_params.json"), "w"))
     json.dump({'datetime': dt, 
                 'dataset': parser_args.dataset_name, 
                 'lag' : parser_args.lag,
@@ -171,7 +175,9 @@ if __name__ == "__main__":
                 'epoch': epoch,
                 'early_stop': early_stop.stop,
                 'validation_best': early_stop.best_val_loss,
-                'seed':parser_args.seed}, open(os.path.join(model_folder_path, "experiment.json"), "w"))
+                'seed':parser_args.seed,
+                "kernel_size":parser_args.kernel_size}, 
+                open(os.path.join(model_folder_path, "experiment.json"), "w"))
 
     # Load the model from disk
     logger.log("Loading the model")

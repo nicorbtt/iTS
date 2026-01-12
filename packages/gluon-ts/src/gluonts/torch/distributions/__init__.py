@@ -41,13 +41,11 @@ from .truncated_normal import TruncatedNormal, TruncatedNormalOutput
 from .tweedie import (
     Tweedie, 
     TweedieOutput, 
-    TweedieWithPriors, 
-    TweedieWithPriorsOutput, 
     FixedDispersionTweedie, 
     FixedDispersionTweedieOutput,
 )
-from .zero_inflated_poisson import ZeroInflatedPoisson, ZeroInflatedPoissonOutput
-from .zero_inflated_negative_binomial import ZeroInflatedNegativeBinomial, ZeroInflatedNegativeBinomialOutput
+from .hurdle_shifted_poisson import HurdleShuiftedPoisson, HurdleShiftedPoissonOutput
+from .hurdle_shifted_negative_binomial import HurdleShiftedNegativeBinomial, HurdleShiftedNegativeBinomialOutput
 
 __all__ = [
     "AffineTransformed",
@@ -80,8 +78,8 @@ __all__ = [
     "TruncatedNormalOutput",
     "Tweedie",
     "TweedieOutput",
-    "ZeroInflatedNegativeBinomial",
-    "ZeroInflatedNegativeBinomialOutput",
-    "ZeroInflatedPoisson",
-    "ZeroInflatedPoissonOutput"
+    "HurdleShiftedNegativeBinomial",
+    "HurdleShiftedNegativeBinomialOutput",
+    "HurdleShiftedPoisson",
+    "HurdleShiftedPoissonOutput"
 ]
