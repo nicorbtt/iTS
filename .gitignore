@@ -159,12 +159,25 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-
 .DS_Store
 data
 packages/*
 trained_models
 access.token
 script.sh
-src/baselines
+develope.ipynb
 .Rproj.user
+
+.Dockerfile
+.dockerscript.sh
+.dockerignore
+#remove the "slurm" folder
+slurm/
+
+.Rdata
+.Rhistory
+.iTS.Rproj
+.Rproj.user/
+
+#remove the nic folder (in src) and its contents
+src/nic/
