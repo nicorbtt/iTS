@@ -11,7 +11,7 @@ from torch.distributions.utils import broadcast_all
 from torch.distributions import NegativeBinomial, Distribution
 
 
-class ZeroInflatedNegativeBinomial(ExponentialFamily):
+class HurdleShiftedNegativeBinomial(ExponentialFamily):
 
     arg_constraints = {"total_count": constraints.nonnegative,
                        "logits": constraints.real,
@@ -69,9 +69,9 @@ class ZeroInflatedNegativeBinomial(ExponentialFamily):
         
     
 
-class ZeroInflatedNegativeBinomialOutput(DistributionOutput):
+class HurdleShiftedNegativeBinomialOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"total_count": 1, "logits":1, "p_zero":1}
-    distr_cls: type = ZeroInflatedNegativeBinomial
+    distr_cls: type = HurdleShiftedNegativeBinomial
 
     @classmethod
     def domain_map(cls, total_count: torch.Tensor, logits: torch.Tensor, p_zero: torch.Tensor):
@@ -91,7 +91,7 @@ class ZeroInflatedNegativeBinomialOutput(DistributionOutput):
             mu = total_count*torch.exp(logits)  
             logits += ((scale*(1. + mu) -1.)/mu).log()
 
-        return ZeroInflatedNegativeBinomial(total_count, logits, p_zero)
+        return HurdleShiftedNegativeBinomial(total_count, logits, p_zero)
         
     @property
     def event_shape(self) -> Tuple:
