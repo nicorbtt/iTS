@@ -13,8 +13,8 @@ from gluonts.torch.distributions import (
     TweedieOutput, 
     TweedieWithPriorsOutput,
     FixedDispersionTweedieOutput,
-    ZeroInflatedPoissonOutput,
-    ZeroInflatedNegativeBinomialOutput,
+    HurdleShiftedPoissonOutput,
+    HurdleShiftedNegativeBinomialOutput,
 )
 from transformers import (
     TimeSeriesTransformerConfig, 
@@ -25,14 +25,13 @@ from transformers import (
     AutoformerForPrediction
 )
 
-
-
 ### Configuration dictionary
 class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
         assert model in ["deepAR", "transformer", "informer", "autoformer"]
-        assert distribution_head in ["poisson","negbin", "tweedie", "tweedie-fix", "tweedie-priors", "zero-inf-pois", "zinb"]
+        assert distribution_head in ["poisson","negbin", "tweedie", "hsp", "hsnb",
+                                     "quantile", "iqn", "isqf"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
         self.distribution_head = distribution_head
@@ -92,8 +91,11 @@ class ModelConfigBuilder:
                         'tweedie' : TweedieOutput(),
                         'tweedie-fix' : FixedDispersionTweedieOutput(),
                         'tweedie-priors' : TweedieWithPriorsOutput(),
-                        'zero-inf-pois' : ZeroInflatedPoissonOutput(),
-                        'zinb' : ZeroInflatedNegativeBinomialOutput()
+                        'hsp' : HurdleShiftedPoissonOutput(),
+                        'hsnb' : HurdleShiftedNegativeBinomialOutput(),
+                        # 'quantile' : QuantileOutput([0.5, 0.8, 0.9, 0.95, .99]),
+                        # 'iqn' : ImplicitQuantileNetworkOutput(),
+                        # 'isqf' : ISQFOutput(num_pieces=6, qk_x=[0.5, 0.8, 0.9, 0.95, .99]),
                     }[self.distribution_head],
                 'lags_seq' : lags_sequence,
                 'scaling' : {
@@ -104,6 +106,43 @@ class ModelConfigBuilder:
                 'default_scale' : None,
                 'num_parallel_samples' : _check('num_parallel_samples', 100)
             }
+
+        # if self.model == "patchTST":
+        #     if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_PATCHTST):
+        #         raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_PATCHTST}")
+        #     self.params = {
+        #         'freq' : data_info['freq'],
+        #         'context_length' : _check('context_length', data_info['h']*data_info['w']),
+        #         'prediction_length' : _check('prediction_length', data_info['h']),
+        #         'num_feat_dynamic_real' : 0,
+        #         'num_feat_static_real' : 0,
+        #         'num_feat_static_cat' : 1,
+        #         'cardinality' : [data_info['N']],
+        #         'embedding_dimension' : _check('embedding_dimension', [3]),
+        #         'num_layers' : _check('num_layers', 2),
+        #         'hidden_size' : _check('hidden_size', 40),
+        #         'dropout_rate' : _check('dropout_rate', 0.1),
+        #         'distr_output' : {
+        #                 'poisson' : PoissonOutput(),
+        #                 'negbin' : NegativeBinomialOutput(),
+        #                 'tweedie' : TweedieOutput(),
+        #                 'tweedie-fix' : FixedDispersionTweedieOutput(),
+        #                 'tweedie-priors' : TweedieWithPriorsOutput(),
+        #                 'hsp' : HurdleShiftedPoissonOutput(),
+        #                 'hsnb' : HurdleShiftedNegativeBinomialOutput(),
+        #                 'quantile' : QuantileOutput([0.5, 0.8, 0.9, 0.95, .99]),
+        #                 'iqn' : ImplicitQuantileNetworkOutput(),
+        #                 'isqf' : ISQFOutput(num_pieces=6, qk_x=[0.5, 0.8, 0.9, 0.95, .99]),
+        #             }[self.distribution_head],
+        #         'lags_seq' : lags_sequence,
+        #         'scaling' : {
+        #                 'mase' : 'MASE',
+        #                 'mean' : 'mean',
+        #                 'mean-demand' : 'mean demand',
+        #             }[self.scaling] if self.scaling else False,
+        #         'default_scale' : None,
+        #         'num_parallel_samples' : _check('num_parallel_samples', 100)
+        #     }
 
         if self.model == "transformer":
             if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_TRANSFORMER):
@@ -117,8 +156,8 @@ class ModelConfigBuilder:
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed_dispersion_tweedie',
                         'tweedie-priors' : 'tweedie_with_priors',
-                        'zero-inf-pois' : 'zero_inflated_poisson',
-                        'zinb' : 'zero_inflated_negative_binomial',
+                        'hsp' : 'hurdle_shifted_poisson',
+                        'hsnb' : 'hurdle_shifted_negative_binomial',
                     }[self.distribution_head],
                 loss = "nll",
                 input_size = 1,
@@ -166,8 +205,8 @@ class ModelConfigBuilder:
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed_dispersion_tweedie',
                         'tweedie-priors' : 'tweedie_with_priors',
-                        'zero-inf-pois' : 'zero_inflated_poisson',
-                        'zinb' : 'zero_inflated_negative_binomial'
+                        'hsp' : 'hurdle_shifted_poisson',
+                        'hsnb' : 'hurdle_shifted_negative_binomial'
                     }[self.distribution_head],
                 loss = "nll",
                 input_size = 1,
@@ -218,8 +257,8 @@ class ModelConfigBuilder:
                         'tweedie' : 'tweedie',
                         'tweedie-fix' : 'fixed_dispersion_tweedie',
                         'tweedie-priors' : 'tweedie_with_priors',
-                        'zero-inf-pois' : 'zero_inflated_poisson',
-                        'zinb' : 'zero_inflated_negative_binomial'
+                        'hsp' : 'hurdle_shifted_poisson',
+                        'hsnb' : 'hurdle_shifted_negative_binomial'
                     }[self.distribution_head],
                 loss = "nll",
                 input_size = 1,
@@ -371,7 +410,6 @@ def predict(model, batch, device, config):
             past_observed_values = batch['past_observed_mask'].to(device),
             num_parallel_samples = config['num_parallel_samples']
         ).detach().cpu().numpy()
-    # TODO rounding
     return(predictions)
 
 class EarlyStop():

@@ -40,22 +40,15 @@ from transformers import PretrainedConfig
 ### Datasets Metadata
 # (context_length = w * h)
 DATASETS_METADATA = {
-    'OnlineRetail'  : {'N': 2489,   'L': 374,   'h': 28,    'freq' : 'D', 'start' : '2010-12-01', 'w' : 2},
     'Auto'          : {'N': 3000,   'L': 24,    'h': 6,     'freq' : 'M', 'start' : '2010-01-01', 'w' : 2},
     'RAF'           : {'N': 5000,   'L': 84,    'h': 12,    'freq' : 'M', 'start' : '1996-01-01', 'w' : 3},
     'carparts'      : {'N': 2509,   'L': 51,    'h': 6,     'freq' : 'M', 'start' : '1998-01-01', 'w' : 2},
-    'syph'          : {'N': 67,     'L': 209,   'h': 13,     'freq' : 'W', 'start' : '2007-01-01', 'w' : 4},
+    'UCI'           : {'N': 1191,   'L': 90,    'h': 14,    'freq' : 'D', 'start' : '2011-09-11', 'w' : 2},
     'M5'            : {'N': 30490,  'L': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4},
-    'crime'         : {'N': 271,    'L': 204,   'h': 12,    'freq' : 'M', 'start' : '2003-01-01', 'w':2},
-    'M5weekly'      : {'N': 30490,  'L': 282,   'h': 13,    'freq' : 'W', 'start' : '2011-01-27', 'w' : 4},
-    'OnlineRetailweekly'  : {'N': 2489,   'L':53,   'h':13,    'freq' : 'D', 'start' : '2010-12-01', 'w' : 2}
-
 }
 
 ### Import raw data from disk
 def load_raw(dataset_name, datasets_folder_path):
-    assert dataset_name in ["OnlineRetail", "Auto", 'RAF', 'carparts', 'syph', 'M5', 'crime', 
-                            'M5weekly', 'OnlineRetailweekly']
     data_raw = pd.read_csv(os.path.join(datasets_folder_path, dataset_name, "data.csv"))
     data_info = {
         'h' : DATASETS_METADATA[dataset_name]['h'],

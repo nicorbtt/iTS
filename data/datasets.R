@@ -12,13 +12,6 @@ carparts = carparts
 path = file.path(PATH_CARPARTS, 'data_raw.csv')
 write.csv2(carparts, path)
 
-#syph dataset
-PATH_SYPH = file.path(getwd(), 'syph')
-if (!dir.exists(PATH_SYPH))dir.create(PATH_SYPH)
-data("syph")
-syph = syph[,3:69]
-path = file.path(PATH_SYPH, 'data_raw.csv')
-write.csv2(syph, path)
 
 #M5 dataset
 PATH_M5 = file.path(getwd(), 'M5')

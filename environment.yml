@@ -1,0 +1,23 @@
+name: iTS
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - pip:
+    - torchvision
+    - torchaudio
+    - torch == 2.2.0
+    - gpytorch
+    - numpy < 2
+    - scipy
+    - pandas 
+    - matplotlib
+    - ipykernel
+    - accelerate
+    - datasets
+    - lightning
+    - ujson
+    - -e ./packages/gluon-ts
+    - -e ./packages/transformers

@@ -1,11 +1,12 @@
 # iTS
 
-This is the official reposirtory fo the paper `Intermittent demand forecasting: local vs global models`, currently under review at the Data Mining and Knowledge Discovery track of ECMLPKDD2026.
+This is the official reposirtory fo the paper `Intermittent time series forecasting: local vs global models`, currently under review at the Data Mining and Knowledge Discovery track of ECMLPKDD2026.
 The paper is autored by Stefano Damato, Nicoló Rubattu, Dario Azzimonti and Giorgio Corani.
 
 The repository is organised as follows:
 
 - `environment.yml`: contains packages and version specifications to reproduce the experiments.
+- `packages/` folder: the local version of the open source packages `gluonts` and `transformers`, which we modified.
 - `data/`: contains the datasets used in the experiments as well as scripts to download and preprocess them.
 - `src/`: contains the code to reproduce the experiments and results in the paper.
 - `trained_models/`: can contain the trained models include in the experiments to avoid retraining them. Left empty for now due to size constraints.
@@ -21,10 +22,12 @@ conda env create -f environment.yml
 conda activate iTS
 ```
 
+This will install all the required packages to run the code in the repository, inluding the modified versions of `gluonts` and `transformers` which we adapted to run our experiments.
+
 ## Data
 
 Use the material in the `data` folder to download and preprocess the datasets used in the experiments.
-Run first `datasets.R` to download the raw files of some datasets, and then `datasets.ipynb` to preprocess all datasets into a common format.
+Run first `datasets.R` in R to download the raw files of some datasets, and then `datasets.ipynb` to preprocess all datasets into a common format.
 
 ## Source code
 
@@ -32,11 +35,10 @@ The `src/` folder contains the material to reproduce the experiments and results
 
 It contains what follows:
 
-- `packages/` folder: contains some files we included in the open source packages `gluonts` and `transformers`.
 - `tweediegp/` folder: copies the official implementation of TweedieGP.
 - `dataloader.py`: code to load the datasets.
 - `measures.py`: contains the metrics used to evaluate the performance of the methods.
-- `models.py`: contains the code to build the neural network architectures under a common interface.
+- `models.py`: contains the code to build the deep neural network architectures under a common interface.
 - `visual.py`: contains some helper functions for checking and visualizing training loops.
 - `baselines.py`: script to run the local baseline methods: in-sample quantiles, iETS and TweedieGP.
 - `feedforward.py`: script to run the experiments with feed-forward neural networks.
