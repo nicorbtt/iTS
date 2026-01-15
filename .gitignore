@@ -160,7 +160,9 @@ cython_debug/
 #.idea/
 
 .DS_Store
-data
+data/*
+!data/datasets.R
+!data/datasets.ipynb
 packages/*
 trained_models
 access.token
@@ -168,16 +170,18 @@ script.sh
 develope.ipynb
 .Rproj.user
 
-.Dockerfile
-.dockerscript.sh
+
+Dockerfile
+dockerscript.sh
 .dockerignore
-#remove the "slurm" folder
 slurm/
 
 .Rdata
 .Rhistory
-.iTS.Rproj
-.Rproj.user/
+iTS.Rproj
+Rproj.user/
 
-#remove the nic folder (in src) and its contents
+README.html
+README_files/
+
 src/nic/
