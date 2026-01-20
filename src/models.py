@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from gluonts.torch.model.deepar.module import DeepARModel
+from gluonts.torch.model.simple_feedforward.module import SimpleFeedForwardModel
+from gluonts.torch.model.d_linear.module import DLinearModel
 from gluonts.time_feature import (
     time_features_from_frequency_str,
     TimeFeature,
@@ -61,6 +63,12 @@ class ModelConfigBuilder:
             'decoder_layerdrop', 'attention_dropout', 'activation_dropout', 'num_parallel_samples', 
             'init_std', 'use_cache', 'label_length', 'moving_average', 'autocorrelation_factor'
         }
+        self._TUNABLE_PARAMS_FEEDFORWARD = {
+            "prediction_length", "context_length", "hidden_dimensions"
+        }
+        self._TUNABLE_PARAMS_DLINEAR = {
+            "prediction_length", "context_length", "hidden_dimension", "kernel_size"
+        }
         self.params = None
 
     def build(self, data_info, **kwargs) -> None:
@@ -90,7 +98,6 @@ class ModelConfigBuilder:
                         'negbin' : NegativeBinomialOutput(),
                         'tweedie' : TweedieOutput(),
                         'tweedie-fix' : FixedDispersionTweedieOutput(),
-                        'tweedie-priors' : TweedieWithPriorsOutput(),
                         'hsp' : HurdleShiftedPoissonOutput(),
                         'hsnb' : HurdleShiftedNegativeBinomialOutput(),
                         # 'quantile' : QuantileOutput([0.5, 0.8, 0.9, 0.95, .99]),
@@ -297,6 +304,35 @@ class ModelConfigBuilder:
                 autocorrelation_factor = _check('autocorrelation_factor', 3)
             )
 
+        if self.model == "feedforward":
+            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_FEEDFORWARD):
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_FEEDFORWARD}")
+            self.params = {
+                'context_length' : _check('context_length', data_info['h']*data_info['w']),
+                'prediction_length' : _check('prediction_length', data_info['h']),
+                'hidden_dimension' : _check('hidden_dimension', 32),
+                'scaling' : {
+                        'mase' : 'MASE',
+                        'mean' : 'mean',
+                        'mean-demand' : 'mean demand'
+                    }[self.scaling] if self.scaling else False,
+            }
+
+        if self.model == "dlinear":
+            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_DLINEAR):
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DLINEAR}")
+            self.params = {
+                'context_length' : _check('context_length', data_info['h']*data_info['w']),
+                'prediction_length' : _check('prediction_length', data_info['h']),
+                'hidden_dimensions' : _check('hidden_dimensions', [[32, 32, 32, 32, 32]]),
+                'kernel_size' : _check('kernel_size', 25),
+                'scaling' : {
+                        'mase' : 'MASE',
+                        'mean' : 'mean',
+                        'mean-demand' : 'mean demand'
+                    }[self.scaling] if self.scaling else False,
+            }
+
     ### Create Model
     def get_model(self):
         if self.model == "deepAR" : 
@@ -308,6 +344,10 @@ class ModelConfigBuilder:
             return(InformerForPrediction(self.params))
         if self.model == 'autoformer':
             return(AutoformerForPrediction(self.params))
+        if self.model == "feedforward":
+            return(SimpleFeedForwardModel(**self.params))
+        if self.model == "dlinear":
+            return(DLinearModel(**self.params))
     
     ### Export config
     def export_config(self):
@@ -320,6 +360,10 @@ class ModelConfigBuilder:
             return {key: self.params.__dict__[key] for key in self._TUNABLE_PARAMS_INFORMER}
         elif self.model == 'autoformer':
             return {key: self.params.__dict__[key] for key in self._TUNABLE_PARAMS_AUTOFORMER}
+        elif self.model == "feedforward":
+            return {key: self.params[key] for key in self._TUNABLE_PARAMS_FEEDFORWARD}
+        elif self.model == "dlinear":
+            return {key: self.params[key] for key in self._TUNABLE_PARAMS_DLINEAR}
 
 ### Forward step
 def forward(model, batch, device, config):
@@ -368,6 +412,19 @@ def forward(model, batch, device, config):
             past_observed_values=batch['past_observed_mask'].to(device),
             future_observed_values=batch["future_observed_mask"].to(device),
         ).mean()
+    if isinstance(model, SimpleFeedForwardModel):
+        loss = model.loss(
+            past_target = batch['past_values'].to(device),
+            future_target = batch['future_values'].to(device),
+            future_observed_values = batch['future_observed_mask'].to(device),
+        ).mean()
+    if isinstance(model, DLinearModel):
+        loss = model.loss(
+            past_target = batch['past_values'].to(device),
+            future_target = batch['future_values'].to(device),
+            past_observed_values = batch['past_observed_mask'].to(device),
+            future_observed_values = batch['future_observed_mask'].to(device),
+        ).mean()
     return(loss)
 
 ### Generate forecasts
@@ -410,6 +467,21 @@ def predict(model, batch, device, config):
             past_observed_values = batch['past_observed_mask'].to(device),
             num_parallel_samples = config['num_parallel_samples']
         ).detach().cpu().numpy()
+    if isinstance(model, SimpleFeedForwardModel):
+        distr_args, loc, scale = model(
+            batch['past_values'].to(device)
+            )
+        predictions = model.distr_output.distribution(
+            distr_args, loc=loc, scale=scale
+            ).sample(torch.Size([10000])).detach().cpu().numpy()
+    if isinstance(model, DLinearModel):
+        distr_args, loc, scale = model(
+            batch['past_values'].to(device),
+            past_observed_values = batch['past_observed_mask'].to(device)
+            )
+        predictions = model.distr_output.distribution(
+            distr_args, loc=loc, scale=scale
+            ).sample(torch.Size([10000])).detach().cpu().numpy()
     return(predictions)
 
 class EarlyStop():
