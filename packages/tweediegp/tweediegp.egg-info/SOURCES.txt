@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+setup.cfg
+setup.py
+tweediegp/__init__.py
+tweediegp/distributions.py
+tweediegp/gp_kernels.py
+tweediegp/gp_likelihoods.py
+tweediegp/gp_models.py
+tweediegp/gp_priors.py
+tweediegp/intermittent_gp.py
+tweediegp.egg-info/PKG-INFO
+tweediegp.egg-info/SOURCES.txt
+tweediegp.egg-info/dependency_links.txt
+tweediegp.egg-info/requires.txt
+tweediegp.egg-info/top_level.txt

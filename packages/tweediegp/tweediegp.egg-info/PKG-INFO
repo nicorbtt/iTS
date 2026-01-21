@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: tweediegp
+Version: 0.0.0
+Summary: Intermittent demand GP utilities
+Author: Local
+License: Proprietary
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# tweediegp
+
+GPs for intermittent time series forecasting.
