@@ -171,7 +171,6 @@ develope.ipynb
 .Rproj.user
 
 
-Dockerfile
 dockerscript.sh
 .dockerignore
 slurm/

@@ -14,6 +14,7 @@ The repository is organised as follows:
 ├── data
 │   ├── datasets.R
 │   └── datasets.ipynb
+├── Dockerfile
 ├── environment.yml
 ├── main.py
 ├── packages
@@ -41,6 +42,7 @@ In particular, the following files are of interest:
 - `trained_models/` folder: where experiments results are saved. For now, it is left empty due to size constraints.
 - `main.py`: script to launch the experiments.
 - `script.sh`: an example script to run multiple all the experiments of the project.
+- `Dockerfile`: to build a Docker image with the environment and code to run the experiments.
 
 
 ## Reproducibility
@@ -79,6 +81,7 @@ It contains what follows:
 
 To run the experiments, use the script `main.py`, which is a wrapper to launch calling either `local.py` or `global.py`, with the critical arguments.
 The common specifications are, geiven the appropriate values in brackets:
+
 - `--dataset_name {DATASETNAME}`: the name of the dataset to use, among those of the paper.
 - `--model {MODELNAME}`: the model to be used.
 
@@ -95,7 +98,7 @@ where `{SEED}` is an numerical seed for reproducibility, and `{DISTRIBUTIONHEAD}
 
 The same experiments can be launched directly from the scripts `src/local.py` and `src/global.py`, where additional arguments can be specified, such as the scaling method, the number of training epochs, or model hyperparameters. However, `main.py` can be used to reproduce the experiments in the paper with default specifications. 
 
-A comprehensive list of all command-lines to be used is contained in `script.sh`. All the experiments are particulary demanding: running the on the CPU of a local machine is feasible, but may take weeks. We thus suggest to use a cluster with GPUs to make the experiments faster and parallelise them.
+A comprehensive list of all command-lines to be used is contained in `script.sh`. All the experiments are particulary demanding: running the on the CPU of a local machine is feasible, but may take weeks. We thus suggest to use a cluster with GPUs to make the experiments faster and parallelise them; build a Docker image with the provided `Dockerfile` to have a ready-to-use environment.
 
 
 ### Trained models
@@ -119,7 +122,15 @@ The `trained_models/` folder is left empty; but experiments run with scripts abo
 To acknowledge our work, please cite the following preprint:
 
 ```
-(#TODO)
+@misc{damato2026intermittent,
+      title={Intermittent time series forecasting: local vs global models}, 
+      author={Stefano Damato and Nicolò Rubattu and Dario Azzimonti and Giorgio Corani},
+      year={2026},
+      eprint={2601.14031},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML},
+      url={https://arxiv.org/abs/2601.14031}, 
+}
 ```
 
 For any questions, please contact Stefano Damato (`stefano.damato@supsi.ch`).
