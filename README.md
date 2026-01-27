@@ -3,7 +3,7 @@ Stefano Damato, Nicoló Rubattu, Dario Azzimonti, Giorgio Corani
 
 ## Overview
 
-This is the official repository fo the paper "Intermittent time series forecasting: local vs global models", autored by Stefano Damato, Nicoló Rubattu, Dario Azzimonti and Giorgio Corani, currently under review at the Data Mining and Knowledge Discovery track of ECMLPKDD2026.
+This is the official repository fo the paper "Intermittent time series forecasting: local vs global models", autored by S. Damato, N. Rubattu, D. Azzimonti and G. Corani, currently under review at the Data Mining and Knowledge Discovery track of ECMLPKDD2026.
 
 The repository is organised as follows:
 
@@ -53,7 +53,7 @@ Crate a conda environment with the provided `environment.yml` file:
 
 ```bash
 conda env create -f environment.yml
-conda activate ilocalglobal
+conda activate ilocglob
 ```
 
 This will install all the required packages to run the code in the repository, inluding the modified versions of `gluonts` and `transformers` which we adapted to run our experiments, and a package version of `tweediegp`.
@@ -94,11 +94,11 @@ For global models, it will take the form:
 python main.py -log --dataset_name {DATASETNAME} --model {MODELNAME} --distribution_head {DISTRIBUTIONHEAD} --seed {SEED}
 ```
 
-where `{SEED}` is an numerical seed for reproducibility, and `{DISTRIBUTIONHEAD}` is the distribution to be coupled with neural networks. The arguments `-log` and `-s`, if used, will enable logging the experiement of text file, and make the training silent respectively.
+where `{SEED}` is a numerical seed for reproducibility, and `{DISTRIBUTIONHEAD}` is the distribution to be coupled with neural networks. The arguments `-log` and `-s`, if used, will enable logging the experiement of text file, and make the training silent respectively.
 
 The same experiments can be launched directly from the scripts `src/local.py` and `src/global.py`, where additional arguments can be specified, such as the scaling method, the number of training epochs, or model hyperparameters. However, `main.py` can be used to reproduce the experiments in the paper with default specifications. 
 
-A comprehensive list of all command-lines to be used is contained in `script.sh`. All the experiments are particulary demanding: running the on the CPU of a local machine is feasible, but may take weeks. We thus suggest to use a cluster with GPUs to make the experiments faster and parallelise them; build a Docker image with the provided `Dockerfile` to have a ready-to-use environment.
+A comprehensive list of all command-lines to be used is contained in `script.sh`. All the experiments are particularly demanding: running them on the CPU of a local machine is feasible, but may take weeks. We thus suggest to use an HPC infrastructure with GPUs to make the experiments faster and parallelise them; using the `Dockerfile` we provide, a ready-to-use environment can be obtained building a Docker image.
 
 
 ### Trained models
@@ -133,5 +133,5 @@ To acknowledge our work, please cite the following preprint:
 }
 ```
 
-For any questions, please contact Stefano Damato (`stefano.damato@supsi.ch`).
-For bug and issues reporting, please use the GitHub issue tracker of the repository.
+For any questions, contact Stefano Damato (`stefano.damato@supsi.ch`).
+For bug and issues reporting, use the GitHub issue tracker of the repository.

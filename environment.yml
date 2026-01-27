@@ -1,10 +1,15 @@
-name: iTS
+name: ilocglob
 channels:
   - conda-forge
   - defaults
 dependencies:
   - python=3.9
   - pip
+  - libstdcxx-ng
+  - libgcc-ng
+  - icu
+  - r-base
+  - rpy2
   - pip:
     - torchvision
     - torchaudio
@@ -21,3 +26,4 @@ dependencies:
     - ujson
     - -e ./packages/gluon-ts
     - -e ./packages/transformers
+    - -e ./packages/tweediegp
