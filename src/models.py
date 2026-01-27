@@ -12,8 +12,7 @@ from gluonts.torch.scaler import MASEScaler, MeanDemandScaler
 from gluonts.torch.distributions import (
     PoissonOutput, 
     NegativeBinomialOutput, 
-    TweedieOutput, 
-    TweedieWithPriorsOutput,
+    TweedieOutput,
     FixedDispersionTweedieOutput,
     HurdleShiftedPoissonOutput,
     HurdleShiftedNegativeBinomialOutput,
@@ -26,14 +25,16 @@ from transformers import (
     AutoformerConfig,
     AutoformerForPrediction
 )
+from rpy2 import robjects
+
+from tweediegp.intermittent_gp import intermittentGP
 
 ### Configuration dictionary
 class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
-        assert model in ["deepAR", "transformer", "informer", "autoformer"]
-        assert distribution_head in ["poisson","negbin", "tweedie", "hsp", "hsnb",
-                                     "quantile", "iqn", "isqf"]
+        assert model in ["deepAR", "transformer", "informer", "autoformer", "dlinear", "feedforward"]
+        assert distribution_head in ["poisson","negbin", "tweedie", "hsp", "hsnb"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
         self.distribution_head = distribution_head
@@ -310,12 +311,12 @@ class ModelConfigBuilder:
             self.params = {
                 'context_length' : _check('context_length', data_info['h']*data_info['w']),
                 'prediction_length' : _check('prediction_length', data_info['h']),
-                'hidden_dimension' : _check('hidden_dimension', 32),
-                'scaling' : {
-                        'mase' : 'MASE',
+                'hidden_dimensions' : _check('hidden_dimensions', [32, 32, 32, 32, 32]),
+                'scale' : {
+                        'mase' : 'mase',
                         'mean' : 'mean',
-                        'mean-demand' : 'mean demand'
-                    }[self.scaling] if self.scaling else False,
+                        'mean-demand' : 'mean-demand'
+                    }[self.scaling] if self.scaling else False
             }
 
         if self.model == "dlinear":
@@ -324,13 +325,13 @@ class ModelConfigBuilder:
             self.params = {
                 'context_length' : _check('context_length', data_info['h']*data_info['w']),
                 'prediction_length' : _check('prediction_length', data_info['h']),
-                'hidden_dimensions' : _check('hidden_dimensions', [[32, 32, 32, 32, 32]]),
+                'hidden_dimension' : _check('hidden_dimension', 32),
                 'kernel_size' : _check('kernel_size', 25),
                 'scaling' : {
-                        'mase' : 'MASE',
+                        'mase' : 'mase',
                         'mean' : 'mean',
-                        'mean-demand' : 'mean demand'
-                    }[self.scaling] if self.scaling else False,
+                        'mean-demand' : 'mean-demand'
+                    }[self.scaling] if self.scaling else False
             }
 
     ### Create Model
@@ -473,7 +474,7 @@ def predict(model, batch, device, config):
             )
         predictions = model.distr_output.distribution(
             distr_args, loc=loc, scale=scale
-            ).sample(torch.Size([10000])).detach().cpu().numpy()
+            ).sample(torch.Size([10000])).detach().cpu().numpy().swapaxes(0,1)
     if isinstance(model, DLinearModel):
         distr_args, loc, scale = model(
             batch['past_values'].to(device),
@@ -481,7 +482,7 @@ def predict(model, batch, device, config):
             )
         predictions = model.distr_output.distribution(
             distr_args, loc=loc, scale=scale
-            ).sample(torch.Size([10000])).detach().cpu().numpy()
+            ).sample(torch.Size([10000])).detach().cpu().numpy().swapaxes(0,1)
     return(predictions)
 
 class EarlyStop():
@@ -505,4 +506,63 @@ class EarlyStop():
             if self.current_patience == self.patience:
                 self.logger.log_earlystop_stop(epoch, self.best_val_loss)
                 self.stop = True
+
+
+class LocalModel:
+    def __init__(self, model: str, data_info, qlevels =[0.5, 0.8, 0.9, 0.95, 0.99]) -> None:
+        assert model in ["ISQ", "iETS", "tweedieGP"]
+        self.model = model
+        self.h = data_info['h']
+        self.qlevels = qlevels
+        if self.model == "tweedieGP":
+            x = torch.arange(data_info['len']).to(torch.float32)
+            x =  x/{"D":365, "W":52, "M":12}[data_info['freq']]
+            self.train_x = x[:-data_info['h']]
+            self.test_x = x[-data_info['h']:]
+            self.tweediegp = intermittentGP(
+                likelihood = "tweedie",
+                scaling = "median-demand",
+                num_inducing_points= None if data_info['len'] < 200 else 200,
+                n_samples=10000
+            )
+        if self.model == "iETS":
+            from rpy2 import robjects
+            try:
+                import rpy2.rinterface_lib.callbacks as rpy2_callbacks
+                rpy2_callbacks.logger.setLevel("ERROR")  # silence embedded R chatter
+                rpy2_callbacks.consolewrite_print = lambda _: None
+            except Exception:
+                pass
+            self.robjects = robjects
+            self.iets = self.robjects.r(f"""
+                function(train_y_R) {{
+                    set.seed(0)
+                    suppressWarnings(model <- smooth::adam(train_y_R, model="MNN", occurrence="auto"))
+                    suppressWarnings(pred <- forecast::forecast(model, h={self.h}, level=c({", ".join([str(q) for q in self.qlevels])}), 
+                                                                interval='simulated', nsim=10000, scenarios=TRUE, side='upper'))
+                    list(as.numeric(pred$mean), pred$upper)
+                }}
+            """)
+        
+
+    def forecast(self, train_y):
+        # mena forecast are h-dimensional, quantiles_forecast are h-dimensional x len(qlevels)
+        mean_forecast, quantile_forecasts = None, None
+        if self.model == 'ISQ':
+            mean_forecast = np.repeat(np.mean(train_y), repeats=self.h)
+            quantile_forecasts = np.tile(np.quantile(train_y, self.qlevels), (self.h,1))
+        if self.model == 'iETS':
+            train_y_R = self.robjects.FloatVector(train_y)
+            iets_fore = self.iets(train_y_R)
+            mean_forecast = np.array(iets_fore.rx2(1))
+            quantile_forecasts = np.array(iets_fore.rx2(2))
+        if self.model == 'tweedieGP':
+            torch.manual_seed(0)
+            train_y = torch.tensor(train_y, dtype=torch.float32)
+            self.tweediegp.build(self.train_x, train_y)
+            self.tweediegp.fit(self.train_x, train_y)
+            mean_forecast, samples = self.tweediegp.predict(self.test_x)
+            mean_forecast = mean_forecast.detach().numpy()
+            quantile_forecasts = np.quantile(samples.detach().numpy(), self.qlevels, axis=0).T
+        return(mean_forecast, quantile_forecasts)
 

@@ -5,7 +5,7 @@ os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = "0.0"
 from dataloader import load_raw, create_datasets, create_dataloaders
 from visual import learning_curves, Logger
 from models import ModelConfigBuilder, forward, predict, EarlyStop
-from measures import compute_intermittent_indicators, label_intermittent, quantile_loss_S, quantile_loss_scaled_in_sample_S, rmsse_S    
+from measures import compute_intermittent_indicators, quantile_loss_, quantile_loss, quantile_loss_scaled_in_sample, rmsse  
 
 import sys
 import argparse
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         return model_params
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'crime', 'VN1', 'UCI'], required=True, help='Specify dataset name')
-    parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer'], required=True, help="Specify model")
+    parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer', 'feedforward', 'dlinear'], required=True, help="Specify model")
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'zinb', 'quantile', 'isqf', 'iqn'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
@@ -62,9 +62,13 @@ if __name__ == "__main__":
         (parser_args.scaling if parser_args.scaling else "none") + "__" +
         dt
     )
-    model_folder_path = os.path.join(os.getcwd(), "trained_models", model_folder_name)
+
+    trained_models_dir = "/opt/trained_models" if os.environ.get("IS_DOCKER") == "1" else os.path.join(os.getcwd(), "trained_models")
+    model_folder_path = os.path.join(trained_models_dir, model_folder_name)
     if not os.path.exists(model_folder_path):
         os.makedirs(model_folder_path)
+        os.makedirs(os.path.join(model_folder_path, "forecasts"))
+    
     
     stdout = open(os.path.join(model_folder_path, "log.txt"), 'x') if parser_args.log else sys.stdout
     logger = Logger(disable=parser_args.silent, stdout=stdout)
@@ -76,16 +80,16 @@ if __name__ == "__main__":
     # Compute intermittent indicators
     logger.log(f"Computing intermittent indicators")
     adi, cv2 = compute_intermittent_indicators(data_raw, data_info['h'])
-    data_info['intermittent'] = label_intermittent(adi, cv2, f="intermittent")
-    data_info['lumpy'] = label_intermittent(adi, cv2, f="lumpy")
+    # data_info['intermittent'] = label_intermittent(adi, cv2, f="intermittent")
+    # data_info['lumpy'] = label_intermittent(adi, cv2, f="lumpy")
 
     # If required, create the additional dataset
-    if parser_args.zero_shot_training_dataset is not None:
-        logger.log(f"Loading training dataset {parser_args.zero_shot_training_dataset}")
-        train_data_raw, train_data_info = load_raw(dataset_name=parser_args.zero_shot_training_dataset, datasets_folder_path=os.path.join("data"))
-        assert train_data_info['freq'] == data_info['freq']
-        train_data_info['h'], train_data_info['w'] = data_info['h'], data_info['w']
-        train_datasets = create_datasets(train_data_raw, train_data_info, zero_id = True)
+    # if parser_args.zero_shot_training_dataset is not None:
+    #     logger.log(f"Loading training dataset {parser_args.zero_shot_training_dataset}")
+    #     train_data_raw, train_data_info = load_raw(dataset_name=parser_args.zero_shot_training_dataset, datasets_folder_path=os.path.join("data"))
+    #     assert train_data_info['freq'] == data_info['freq']
+    #     train_data_info['h'], train_data_info['w'] = data_info['h'], data_info['w']
+    #     train_datasets = create_datasets(train_data_raw, train_data_info, zero_id = True)
         
     # Create Datasets (train, valid, test) objects
     datasets = create_datasets(data_raw, data_info, zero_id = False if parser_args.zero_shot_training_dataset is None else True)
@@ -98,8 +102,8 @@ if __name__ == "__main__":
 
     # Dataloaders
     train_dataloader, valid_dataloader, test_dataloader = create_dataloaders(CONFIG, datasets, data_info, batch_size=parser_args.batch_size)
-    if parser_args.zero_shot_training_dataset is not None:
-        train_dataloader, valid_dataloader, _ = create_dataloaders(CONFIG, train_datasets, train_data_info, batch_size=parser_args.batch_size)
+    # if parser_args.zero_shot_training_dataset is not None:
+    #     train_dataloader, valid_dataloader, _ = create_dataloaders(CONFIG, train_datasets, train_data_info, batch_size=parser_args.batch_size)
 
     # Build the model
     logger.log(f"Building the model")
@@ -153,7 +157,7 @@ if __name__ == "__main__":
                 'epoch': epoch,
                 'early_stop': early_stop.stop,
                 'validation_best': early_stop.best_val_loss,
-                'seed':parser_args.seed}, open(os.path.join(model_folder_path, "experiment.json"), "w"))
+                'seed':parser_args.seed}, open(os.path.join(model_folder_path, "experiment.json"), "w"), indent=4)
 
     # Load the model from disk
     logger.log("Loading the model")
@@ -172,19 +176,25 @@ if __name__ == "__main__":
 
     logger.log("Generating forecasts, device="+str(device))
     model.eval()
-    forecasts_list = []
+    qlevels = [0.5, 0.8, 0.9, 0.95, 0.99]
+    mean_forecasts, quantile_forecasts = [], []
     for i, batch in enumerate(test_dataloader):
         logger.log("Batch " + str(i+1) + " out of " + str(len(list(test_dataloader))))
-        forecasts_list.append(predict(model, batch, device, CONFIG))
-    forecasts = np.vstack(forecasts_list)
-    actuals = np.array([x[FieldName.TARGET][-data_info['h']:] for x in datasets['test']])
-    insample = np.array([x[FieldName.TARGET][:-data_info['h']] for x in datasets['test']])
-    assert actuals.shape[0] == forecasts.shape[0]
-    assert actuals.shape[1] == forecasts.shape[2]
-    assert forecasts.ndim == 3
+        forecast_samples = predict(model, batch, device, CONFIG)
+        mean_forecasts.append(forecast_samples.mean(axis=1))
+        quantile_forecasts.append(np.quantile(forecast_samples, qlevels, axis=1).transpose(1,2,0))
+    mean_forecasts = np.vstack(mean_forecasts)
+    quantile_forecasts = np.vstack(quantile_forecasts)
 
-    np.save(os.path.join(model_folder_path,"actuals.npy"), actuals)
-    np.save(os.path.join(model_folder_path,"forecasts.npy"), forecasts)
+
+    actuals = np.array([x["target"][-data_info['h']:] for x in datasets['test']])
+    insample = np.array([x["target"][:-data_info['h']] for x in datasets['test']])
+    assert quantile_forecasts.shape == (*actuals.shape, len(qlevels))
+    assert mean_forecasts.shape == actuals.shape
+    np.save(os.path.join(model_folder_path, os.path.join("forecasts", "mean_forecasts.npy")), mean_forecasts)
+    for k, q in enumerate(qlevels):
+        np.save(os.path.join(model_folder_path, os.path.join("forecasts", "q"+str(q)+".npy")), quantile_forecasts[:,:,k])
+    np.save(os.path.join(model_folder_path, os.path.join("forecasts", "actuals.npy")), actuals)
 
     # Quantile Loss
     logger.log("Computing performance measures")
@@ -193,26 +203,24 @@ if __name__ == "__main__":
     idx_non_smooth = adi > 1.
     metrics = {
         'quantile_loss' : {
-            'all' : quantile_loss_S(actuals, forecasts),
-            'intermittent' : quantile_loss_S(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:]),
-            'intermittent_and_lumpy' : quantile_loss_S(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:]),
-            'non-smooth': quantile_loss_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:])
+            'all' : quantile_loss(actuals, quantile_forecasts),
+            'intermittent' : quantile_loss(actuals[idx_intermittent,:], quantile_forecasts[idx_intermittent,:,:]),
+            'intermittent_and_lumpy' : quantile_loss(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:]),
+            'non-smooth': quantile_loss(actuals[idx_non_smooth,:], quantile_forecasts[idx_non_smooth,:,:])
             },
         'quantile_loss_scaled_in_sample': {
-            'all' : quantile_loss_scaled_in_sample_S(actuals, forecasts, insample),
-            'intermittent' : quantile_loss_scaled_in_sample_S(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:], insample[idx_intermittent,:]),
-            'intermittent_and_lumpy' : quantile_loss_scaled_in_sample_S(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
-            'non-smooth': quantile_loss_scaled_in_sample_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
+            'all' : quantile_loss_scaled_in_sample(actuals, quantile_forecasts, insample),
+            'intermittent' : quantile_loss_scaled_in_sample(actuals[idx_intermittent,:], quantile_forecasts[idx_intermittent,:,:], insample[idx_intermittent,:]),
+            'intermittent_and_lumpy' : quantile_loss_scaled_in_sample(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
+            'non-smooth': quantile_loss_scaled_in_sample(actuals[idx_non_smooth,:], quantile_forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
             },  
         'rmsse': {
-            'all' : rmsse_S(actuals, forecasts, insample),   
-            'intermittent' : rmsse_S(actuals[idx_intermittent,:], forecasts[idx_intermittent,:,:], insample[idx_intermittent,:]),
-            'intermittent_and_lumpy' : rmsse_S(actuals[idx_intermittent_and_lumpy,:], forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
-            'non-smooth': rmsse_S(actuals[idx_non_smooth,:], forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
+            'all' : rmsse(actuals, mean_forecasts, insample),   
+            'intermittent' : rmsse(actuals[idx_intermittent,:], mean_forecasts[idx_intermittent,:], insample[idx_intermittent,:]),
+            'intermittent_and_lumpy' : rmsse(actuals[idx_intermittent_and_lumpy,:], mean_forecasts[idx_intermittent_and_lumpy,:], insample[idx_intermittent_and_lumpy,:]),
+            'non-smooth': rmsse(actuals[idx_non_smooth,:], mean_forecasts[idx_non_smooth,:], insample[idx_non_smooth,:])
             }
         }
-               
     json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"), indent=4)
-
     logger.log(f"End. Find results in {model_folder_path}")
     logger.off()
