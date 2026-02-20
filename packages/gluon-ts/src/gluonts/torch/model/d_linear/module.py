@@ -105,6 +105,10 @@ class DLinearModel(nn.Module):
             self.scaler = StdScaler(keepdim=True)
         elif scaling == "mean-demand":
             self.scaler = MeanDemandScaler(keepdim=True)
+        elif scaling == "mase":
+            raise NotImplementedError(
+                "MASE scaling is not implemented for DLinearModel."
+            )
         else:
             self.scaler = NOPScaler(keepdim=True)
 

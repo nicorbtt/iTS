@@ -44,7 +44,7 @@ from .tweedie import (
     FixedDispersionTweedie, 
     FixedDispersionTweedieOutput,
 )
-from .hurdle_shifted_poisson import HurdleShuiftedPoisson, HurdleShiftedPoissonOutput
+from .hurdle_shifted_poisson import HurdleShiftedPoisson, HurdleShiftedPoissonOutput
 from .hurdle_shifted_negative_binomial import HurdleShiftedNegativeBinomial, HurdleShiftedNegativeBinomialOutput
 
 __all__ = [

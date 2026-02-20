@@ -3,7 +3,7 @@ Stefano Damato, Nicoló Rubattu, Dario Azzimonti, Giorgio Corani
 
 ## Overview
 
-This is the official repository fo the paper "Intermittent time series forecasting: local vs global models", autored by S. Damato, N. Rubattu, D. Azzimonti and G. Corani, currently under review at the Data Mining and Knowledge Discovery track of ECMLPKDD2026.
+This is the official repository fo the paper "Intermittent time series forecasting: local vs global models", authored by S. Damato, N. Rubattu, D. Azzimonti and G. Corani, currently under review at the Data Mining and Knowledge Discovery track of ECMLPKDD2026.
 
 The repository is organised as follows:
 
@@ -18,9 +18,9 @@ The repository is organised as follows:
 ├── environment.yml
 ├── main.py
 ├── packages
-│   ├── gluon-ts/...
-│   ├── transformers/...
-│   └── tweediegp/...
+│   ├── gluon-ts/
+│   ├── transformers/
+│   └── tweediegp/
 ├── script.sh
 ├── src
 │   ├── dataloader.py
@@ -28,9 +28,9 @@ The repository is organised as follows:
 │   ├── local.py
 │   ├── measures.py
 │   ├── models.py
-|   ├── results.ipynb (#TODO)
+│   ├── results.ipynb (#TODO)
 │   └── visual.py
-└── trained_models/...
+└── trained_models/
 ```
 
 In particular, the following files are of interest:
@@ -50,13 +50,15 @@ In particular, the following files are of interest:
 ### Environment
 
 Crate a conda environment with the provided `environment.yml` file:
-
 ```bash
 conda env create -f environment.yml
-conda activate ilocglob
 ```
 
-This will install all the required packages to run the code in the repository, inluding the modified versions of `gluonts` and `transformers` which we adapted to run our experiments, and a package version of `tweediegp`.
+This will install all the required packages to run the code in the repository, including the modified versions of `gluonts` and `transformers` which we adapted to perform our experiments, and a package version of `tweediegp`. To actually use it, run:
+```bash
+conda activate ilocglob
+```
+before any other action below.
 
 ### Data
 
@@ -104,9 +106,9 @@ A comprehensive list of all command-lines to be used is contained in `script.sh`
 ### Trained models
 
 
-As a result of each experiment, a folder will be created in `trained_models/` containing the forecasts, metrics, metadata on the hyperparameters of the experiments, and information about the training process. Its name will summarize the configuration of the experiment, being similar to `{MODELNNAME}__{DATASETNAME}`, followed by additional information regarding the experiment and the datetime of its start.
+As a result of each experiment, a folder will be created in `trained_models/` containing the forecasts, metrics, metadata on the hyperparameters of the experiments, and information about the training process. Its name will summarise the configuration of the experiment, being similar to `{MODELNNAME}__{DATASETNAME}`, followed by additional information regarding the experiment and the timestamp of its start.
 
-The `trained_models/` folder is left empty; but experiments run with scripts above will be saved here. Each subfolder, representing an experiment, will contain:
+The `trained_models/` folder is left empty; but experiments run with scripts above will be saved in it. Each subfolder, representing an experiment, will contain:
 
 - `actuals.npy`: an array with the obesrved test values.
 - `mean_forecasts.npy`: an array of mean forecasts.

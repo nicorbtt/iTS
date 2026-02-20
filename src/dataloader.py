@@ -40,11 +40,11 @@ from transformers import PretrainedConfig
 ### Datasets Metadata
 # (context_length = w * h)
 DATASETS_METADATA = {
-    'Auto'          : {'N': 3000,   'L': 24,    'h': 6,     'freq' : 'M', 'start' : '2010-01-01', 'w' : 2},
-    'RAF'           : {'N': 5000,   'L': 84,    'h': 12,    'freq' : 'M', 'start' : '1996-01-01', 'w' : 3},
-    'carparts'      : {'N': 2509,   'L': 51,    'h': 6,     'freq' : 'M', 'start' : '1998-01-01', 'w' : 2},
-    'UCI'           : {'N': 1191,   'L': 90,    'h': 14,    'freq' : 'D', 'start' : '2011-09-11', 'w' : 2},
-    'M5'            : {'N': 30490,  'L': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4},
+    'Auto'          : {'N': 3000,   'len': 24,    'h': 6,     'freq' : 'M', 'start' : '2010-01-01', 'w' : 2},
+    'RAF'           : {'N': 5000,   'len': 84,    'h': 12,    'freq' : 'M', 'start' : '1996-01-01', 'w' : 3},
+    'carparts'      : {'N': 2509,   'len': 51,    'h': 6,     'freq' : 'M', 'start' : '1998-01-01', 'w' : 2},
+    'UCI'           : {'N': 1191,   'len': 90,    'h': 14,    'freq' : 'D', 'start' : '2011-09-11', 'w' : 2},
+    'M5'            : {'N': 30490,  'len': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4},
 }
 
 ### Import raw data from disk
@@ -54,7 +54,8 @@ def load_raw(dataset_name, datasets_folder_path):
         'h' : DATASETS_METADATA[dataset_name]['h'],
         'freq' : DATASETS_METADATA[dataset_name]['freq'],
         'start' : DATASETS_METADATA[dataset_name]['start'],
-        'w' : DATASETS_METADATA[dataset_name]['w']
+        'w' : DATASETS_METADATA[dataset_name]['w'],
+        'len' : DATASETS_METADATA[dataset_name]['len']
     }
     return(data_raw, data_info)
 
@@ -108,11 +109,11 @@ def create_datasets(data, data_info, na_rm = True, zero_rm=True, zero_id = False
 ### Transformations Chain
 def create_transformation(freq: str, config: PretrainedConfig) -> Transformation:
     remove_field_names = []
-    if config['num_static_real_features'] == 0:
+    if config.get('num_static_real_features', 0) == 0:
         remove_field_names.append(FieldName.FEAT_STATIC_REAL)
-    if config['num_dynamic_real_features'] == 0:
+    if config.get('num_dynamic_real_features', 0) == 0:
         remove_field_names.append(FieldName.FEAT_DYNAMIC_REAL)
-    if config['num_static_categorical_features'] == 0:
+    if config.get('num_static_categorical_features', 0) == 0:
         remove_field_names.append(FieldName.FEAT_STATIC_CAT)
 
     if freq =="M":
@@ -130,7 +131,7 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                     dtype=int
                 )
             ]
-            if config['num_static_categorical_features'] > 0
+            if config.get('num_static_categorical_features', 0) > 0
             else []
         )
         + (
@@ -140,7 +141,7 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                     expected_ndim=1,
                 )
             ]
-            if config['num_static_real_features'] > 0
+            if config.get('num_static_real_features', 0) > 0
             else []
         )
         + [
@@ -183,7 +184,7 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                 input_fields=[FieldName.FEAT_TIME, FieldName.FEAT_AGE]
                 + (
                     [FieldName.FEAT_DYNAMIC_REAL]
-                    if config['num_dynamic_real_features'] > 0
+                    if config.get('num_dynamic_real_features', 0) > 0
                     else []
                 ),
             ),
@@ -245,10 +246,10 @@ def create_train_dataloader(
         "past_observed_mask",
         "future_time_features",
     ]
-    if config['num_static_categorical_features'] > 0:
+    if config.get('num_static_categorical_features', 0) > 0:
         PREDICTION_INPUT_NAMES.append("static_categorical_features")
 
-    if config['num_static_real_features'] > 0:
+    if config.get('num_static_real_features', 0) > 0:
         PREDICTION_INPUT_NAMES.append("static_real_features")
 
     TRAINING_INPUT_NAMES = PREDICTION_INPUT_NAMES + [
@@ -291,10 +292,10 @@ def create_backtest_dataloader(
         "past_observed_mask",
         "future_time_features",
     ] + ["future_values", "future_observed_mask"]
-    if config['num_static_categorical_features'] > 0:
+    if config.get('num_static_categorical_features', 0) > 0:
         PREDICTION_INPUT_NAMES.append("static_categorical_features")
 
-    if config['num_static_real_features'] > 0:
+    if config.get('num_static_real_features', 0) > 0:
         PREDICTION_INPUT_NAMES.append("static_real_features")
 
     transformation = create_transformation(freq, config)
@@ -326,10 +327,10 @@ def create_test_dataloader(
         "past_observed_mask",
         "future_time_features",
     ]
-    if config['num_static_categorical_features'] > 0:
+    if config.get('num_static_categorical_features', 0) > 0:
         PREDICTION_INPUT_NAMES.append("static_categorical_features")
 
-    if config['num_static_real_features'] > 0:
+    if config.get('num_static_real_features', 0) > 0:
         PREDICTION_INPUT_NAMES.append("static_real_features")
 
     transformation = create_transformation(freq, config)

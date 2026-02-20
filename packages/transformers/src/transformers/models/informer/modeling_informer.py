@@ -1837,7 +1837,7 @@ class InformerForPrediction(InformerPreTrainedModel):
             self.distribution_output = FixedDispersionTweedieOutput()
         elif config.distribution_output == "poisson":
             self.distribution_output = PoissonOutput()
-        elif config.distribution_output == "hsnb":
+        elif config.distribution_output == "hurdle_shifted_negative_binomial":
             self.distribution_output = HurdleShiftedNegativeBinomialOutput()
         else:
             raise ValueError(f"Unknown distribution output {config.distribution_output}")

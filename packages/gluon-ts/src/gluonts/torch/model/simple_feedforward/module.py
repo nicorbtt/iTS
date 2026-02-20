@@ -120,7 +120,11 @@ class SimpleFeedForwardModel(nn.Module):
         if self.scale == "mean-demand":
             s = mean_demand_scaling(past_target)  
         elif self.scale == "mean":
-            s = mean_abs_scaling(past_target)     
+            s = mean_abs_scaling(past_target) 
+        elif self.scale == "mase":
+            raise NotImplementedError(
+                "MASE scaling is not implemented for SimpleFeedForwardModel."
+            )    
         else:
             s = torch.ones((past_target.shape[0],1))
         scaled_context = past_target / s

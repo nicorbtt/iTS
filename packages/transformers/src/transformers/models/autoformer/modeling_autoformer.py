@@ -1899,9 +1899,9 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             self.distribution_output = FixedDispersionTweedieOutput(dim=config.input_size)
         elif config.distribution_output == "poisson":
             self.distribution_output = PoissonOutput(dim=config.input_size)
-        elif config.distribution_output == "hsp":
+        elif config.distribution_output == "hurdle_shifted_poisson":
             self.distribution_output = HurdleShiftedPoissonOutput(dim=config.input_size)
-        elif config.distribution_output == "hsnb":
+        elif config.distribution_output == "hurdle_shifted_negative_binomial":
             self.distribution_output = HurdleShiftedNegativeBinomialOutput(dim=config.input_size)
         else:
             raise ValueError(f"Unknown distribution output {config.distribution_output}")

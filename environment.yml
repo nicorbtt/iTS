@@ -1,4 +1,4 @@
-name: ilocglob
+name: iTS
 channels:
   - conda-forge
   - defaults
