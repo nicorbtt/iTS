@@ -13,15 +13,15 @@ COPY packages/ ./packages/
 
 RUN conda env create -f environment.yml
 
-SHELL ["conda", "run", "-n", "iTS", "/bin/bash", "-c"]
+SHELL ["conda", "run", "-n", "ilocglob", "/bin/bash", "-c"]
 
 RUN mkdir -p /opt/trained_models
 COPY data/ ./data/
 COPY src/ ./src/
 
-ENV PATH=/opt/conda/envs/iTS/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/conda/envs/iTS/lib
-ENV LD_PRELOAD=/opt/conda/envs/iTS/lib/libstdc++.so.6
+ENV PATH=/opt/conda/envs/ilocglob/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/conda/envs/ilocglob/lib
+ENV LD_PRELOAD=/opt/conda/envs/ilocglob/lib/libstdc++.so.6
 ENV IS_DOCKER=1
 
-ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "iTS"]
+ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "ilocglob"]
