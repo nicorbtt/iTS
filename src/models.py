@@ -311,6 +311,13 @@ class ModelConfigBuilder:
             self.params = {
                 'context_length' : _check('context_length', data_info['h']*data_info['w']),
                 'prediction_length' : _check('prediction_length', data_info['h']),
+                'distr_output' : {
+                        'poisson' : PoissonOutput(),
+                        'negbin' : NegativeBinomialOutput(),
+                        'tweedie' : TweedieOutput(),
+                        'hsp' : HurdleShiftedPoissonOutput(),
+                        'hsnb' : HurdleShiftedNegativeBinomialOutput(),
+                    }[self.distribution_head],
                 'hidden_dimensions' : _check('hidden_dimensions', [32, 32, 32, 32, 32]),
                 'scale' : {
                         'mase' : 'mase',
@@ -325,6 +332,13 @@ class ModelConfigBuilder:
             self.params = {
                 'context_length' : _check('context_length', data_info['h']*data_info['w']),
                 'prediction_length' : _check('prediction_length', data_info['h']),
+                'distr_output' : {
+                        'poisson' : PoissonOutput(),
+                        'negbin' : NegativeBinomialOutput(),
+                        'tweedie' : TweedieOutput(),
+                        'hsp' : HurdleShiftedPoissonOutput(),
+                        'hsnb' : HurdleShiftedNegativeBinomialOutput(),
+                    }[self.distribution_head],
                 'hidden_dimension' : _check('hidden_dimension', 32),
                 'kernel_size' : _check('kernel_size', 25),
                 'scaling' : {
