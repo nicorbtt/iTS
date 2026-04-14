@@ -27,8 +27,8 @@ if __name__ == "__main__":
             raise argparse.ArgumentTypeError("File must have a .json extension")
         return model_params
     parser = argparse.ArgumentParser(description="iTS")
-    parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'crime', 'VN1', 'UCI'], required=True, help='Specify dataset name')
-    parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer', 'feedforward', 'dlinear'], required=True, help="Specify model")
+    parser.add_argument('--dataset_name', '--dataset-name', dest='dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'crime', 'VN1', 'UCI'], required=True, help='Specify dataset name')
+    parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer', 'patchTST', 'tide', 'feedforward', 'dlinear'], required=True, help="Specify model")
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'hsnb', 'quantile', 'isqf', 'iqn'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
@@ -224,3 +224,6 @@ if __name__ == "__main__":
     json.dump(metrics, open(os.path.join(model_folder_path,"metrics.json"), "w"), indent=4)
     logger.log(f"End. Find results in {model_folder_path}")
     logger.off()
+
+    # to debug:
+    # --dataset_name Auto --model tide --distribution_head negbin --scaling mean-demand --cpu True

@@ -3,6 +3,8 @@ import torch
 from gluonts.torch.model.deepar.module import DeepARModel
 from gluonts.torch.model.simple_feedforward.module import SimpleFeedForwardModel
 from gluonts.torch.model.d_linear.module import DLinearModel
+from gluonts.torch.model.patch_tst.module import PatchTSTModel
+from gluonts.torch.model.tide.module import TiDEModel
 from gluonts.time_feature import (
     time_features_from_frequency_str,
     TimeFeature,
@@ -33,7 +35,7 @@ from tweediegp.intermittent_gp import intermittentGP
 class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
-        assert model in ["deepAR", "transformer", "informer", "autoformer", "dlinear", "feedforward"]
+        assert model in ["deepAR", "transformer", "informer", "autoformer", "patchTST", "tide", "dlinear", "feedforward"]
         assert distribution_head in ["poisson","negbin", "tweedie", "hsp", "hsnb"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
@@ -69,6 +71,18 @@ class ModelConfigBuilder:
         }
         self._TUNABLE_PARAMS_DLINEAR = {
             "prediction_length", "context_length", "hidden_dimension", "kernel_size"
+        }
+        self._TUNABLE_PARAMS_PATCHTST = {
+            'prediction_length', 'context_length', 'patch_len', 'stride', 'padding_patch',
+            'd_model', 'nhead', 'dim_feedforward', 'num_encoder_layers',
+            'dropout', 'activation', 'norm_first'
+        }
+        self._TUNABLE_PARAMS_TIDE = {
+            'prediction_length', 'context_length', 'num_feat_dynamic_proj',
+            'feat_proj_hidden_dim', 'encoder_hidden_dim', 'decoder_hidden_dim',
+            'temporal_hidden_dim', 'distr_hidden_dim', 'decoder_output_dim',
+            'dropout_rate', 'num_layers_encoder', 'num_layers_decoder',
+            'layer_norm', 'embedding_dimension'
         }
         self.params = None
 
@@ -114,43 +128,6 @@ class ModelConfigBuilder:
                 'default_scale' : None,
                 'num_parallel_samples' : _check('num_parallel_samples', 100)
             }
-
-        # if self.model == "patchTST":
-        #     if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_PATCHTST):
-        #         raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_PATCHTST}")
-        #     self.params = {
-        #         'freq' : data_info['freq'],
-        #         'context_length' : _check('context_length', data_info['h']*data_info['w']),
-        #         'prediction_length' : _check('prediction_length', data_info['h']),
-        #         'num_feat_dynamic_real' : 0,
-        #         'num_feat_static_real' : 0,
-        #         'num_feat_static_cat' : 1,
-        #         'cardinality' : [data_info['N']],
-        #         'embedding_dimension' : _check('embedding_dimension', [3]),
-        #         'num_layers' : _check('num_layers', 2),
-        #         'hidden_size' : _check('hidden_size', 40),
-        #         'dropout_rate' : _check('dropout_rate', 0.1),
-        #         'distr_output' : {
-        #                 'poisson' : PoissonOutput(),
-        #                 'negbin' : NegativeBinomialOutput(),
-        #                 'tweedie' : TweedieOutput(),
-        #                 'tweedie-fix' : FixedDispersionTweedieOutput(),
-        #                 'tweedie-priors' : TweedieWithPriorsOutput(),
-        #                 'hsp' : HurdleShiftedPoissonOutput(),
-        #                 'hsnb' : HurdleShiftedNegativeBinomialOutput(),
-        #                 'quantile' : QuantileOutput([0.5, 0.8, 0.9, 0.95, .99]),
-        #                 'iqn' : ImplicitQuantileNetworkOutput(),
-        #                 'isqf' : ISQFOutput(num_pieces=6, qk_x=[0.5, 0.8, 0.9, 0.95, .99]),
-        #             }[self.distribution_head],
-        #         'lags_seq' : lags_sequence,
-        #         'scaling' : {
-        #                 'mase' : 'MASE',
-        #                 'mean' : 'mean',
-        #                 'mean-demand' : 'mean demand',
-        #             }[self.scaling] if self.scaling else False,
-        #         'default_scale' : None,
-        #         'num_parallel_samples' : _check('num_parallel_samples', 100)
-        #     }
 
         if self.model == "transformer":
             if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_TRANSFORMER):
@@ -326,6 +303,75 @@ class ModelConfigBuilder:
                     }[self.scaling] if self.scaling else False
             }
 
+        if self.model == "patchTST":
+            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_PATCHTST):
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_PATCHTST}")
+            self.params = {
+                'prediction_length' : _check('prediction_length', data_info['h']),
+                'context_length' : _check('context_length', data_info['h']*data_info['w']),
+                'patch_len' : _check('patch_len', data_info['h']),
+                'stride' : _check('stride', data_info['h'] // 2),
+                'padding_patch' : _check('padding_patch', 'end'),
+                'd_model' : _check('d_model', 32),
+                'nhead' : _check('nhead', 2),
+                'dim_feedforward' : _check('dim_feedforward', 32),
+                'num_feat_dynamic_real' : 0,
+                'num_encoder_layers' : _check('num_encoder_layers', 2),
+                'dropout' : _check('dropout', 0.1),
+                'activation' : _check('activation', 'relu'),
+                'norm_first' : _check('norm_first', False),
+                'scaling' : {
+                        'mase' : 'MASE',
+                        'mean' : 'mean',
+                        'mean-demand' : 'mean-demand',
+                    }[self.scaling] if self.scaling else None,
+                'distr_output' : {
+                        'poisson' : PoissonOutput(),
+                        'negbin' : NegativeBinomialOutput(),
+                        'tweedie' : TweedieOutput(),
+                        'tweedie-fix' : FixedDispersionTweedieOutput(),
+                        'hsp' : HurdleShiftedPoissonOutput(),
+                        'hsnb' : HurdleShiftedNegativeBinomialOutput(),
+                    }[self.distribution_head],
+            }
+
+        if self.model == "tide":
+            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_TIDE):
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_TIDE}")
+            self.params = {
+                'context_length' : _check('context_length', data_info['h']*data_info['w']),
+                'prediction_length' : _check('prediction_length', data_info['h']),
+                # Keep base config minimal; runtime dimensions are adapted in get_model.
+                'num_feat_dynamic_real' : 0,
+                'num_feat_dynamic_proj' : _check('num_feat_dynamic_proj', 2),
+                'num_feat_static_real' : 1,
+                'num_feat_static_cat' : 1,
+                'cardinality' : [data_info['N']],
+                'embedding_dimension' : _check('embedding_dimension', [3]),
+                'feat_proj_hidden_dim' : _check('feat_proj_hidden_dim', 4),
+                'encoder_hidden_dim' : _check('encoder_hidden_dim', 32),
+                'decoder_hidden_dim' : _check('decoder_hidden_dim', 32),
+                'temporal_hidden_dim' : _check('temporal_hidden_dim', 32),
+                'distr_hidden_dim' : _check('distr_hidden_dim', 32),
+                'decoder_output_dim' : _check('decoder_output_dim', 16),
+                'dropout_rate' : _check('dropout_rate', 0.1),
+                'num_layers_encoder' : _check('num_layers_encoder', 2),
+                'num_layers_decoder' : _check('num_layers_decoder', 2),
+                'layer_norm' : _check('layer_norm', False),
+                'distr_output' : {
+                        'poisson' : PoissonOutput(),
+                        'negbin' : NegativeBinomialOutput(),
+                        'tweedie' : TweedieOutput(),
+                        'hsp' : HurdleShiftedPoissonOutput(),
+                        'hsnb' : HurdleShiftedNegativeBinomialOutput(),
+                    }[self.distribution_head],
+                'scaling' : {
+                        'mase' : None,
+                        'mean' : 'mean',
+                        'mean-demand' : 'mean-demand',
+                    }[self.scaling] if self.scaling else None,
+            }
+
         if self.model == "dlinear":
             if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_DLINEAR):
                 raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_DLINEAR}")
@@ -359,6 +405,11 @@ class ModelConfigBuilder:
             return(InformerForPrediction(self.params))
         if self.model == 'autoformer':
             return(AutoformerForPrediction(self.params))
+        if self.model == 'patchTST':
+            return(PatchTSTModel(**self.params))
+        if self.model == 'tide':
+            tmp = self.params['num_feat_dynamic_real'] + len(self.time_features) + 1
+            return(TiDEModel(**({**self.params, 'num_feat_dynamic_real': tmp, 'num_feat_static_real':1})))
         if self.model == "feedforward":
             return(SimpleFeedForwardModel(**self.params))
         if self.model == "dlinear":
@@ -379,10 +430,34 @@ class ModelConfigBuilder:
             return {key: self.params[key] for key in self._TUNABLE_PARAMS_FEEDFORWARD}
         elif self.model == "dlinear":
             return {key: self.params[key] for key in self._TUNABLE_PARAMS_DLINEAR}
+        elif self.model == 'patchTST':
+            return {key: self.params[key] for key in self._TUNABLE_PARAMS_PATCHTST}
+        elif self.model == 'tide':
+            return {key: self.params[key] for key in self._TUNABLE_PARAMS_TIDE}
 
 ### Forward step
 def forward(model, batch, device, config):
     loss = None
+    # def _ensure_channel_dim(tensor):
+    #     return tensor.unsqueeze(-1) if tensor.dim() == 2 else tensor
+    if isinstance(model, PatchTSTModel):
+        loss = model.loss(
+            past_target = batch['past_values'].to(device),
+            future_target = batch['future_values'].to(device),
+            past_observed_values = batch['past_observed_mask'].to(device),
+            future_observed_values = batch['future_observed_mask'].to(device),
+        ).mean()
+    if isinstance(model, TiDEModel):
+        loss = model.loss(
+            feat_static_real=torch.zeros((batch['past_values'].shape[0], 1), device=device),
+            feat_static_cat=batch["static_categorical_features"].to(device),
+            past_time_feat=batch["past_time_features"].to(device),
+            past_target=batch['past_values'].to(device),
+            past_observed_values=batch['past_observed_mask'].to(device),
+            future_time_feat=batch['future_time_features'].to(device),
+            future_target=batch['future_values'].to(device),
+            future_observed_values=batch['future_observed_mask'].to(device),
+        ).mean()
     if isinstance(model, TimeSeriesTransformerForPrediction):
         loss = model(
             static_categorical_features=batch["static_categorical_features"].to(device) if config.num_static_categorical_features > 0 else None,
@@ -445,6 +520,28 @@ def forward(model, batch, device, config):
 ### Generate forecasts
 def predict(model, batch, device, config):
     predictions = None
+    def _ensure_channel_dim(tensor):
+        return tensor.unsqueeze(-1) if tensor.dim() == 2 else tensor
+    if isinstance(model, PatchTSTModel):
+        distr_args, loc, scale = model(
+            past_target = batch['past_values'].to(device),
+            past_observed_values = batch['past_observed_mask'].to(device),
+        )
+        predictions = model.distr_output.distribution(
+            distr_args, loc=loc, scale=scale
+        ).sample(torch.Size([10000])).detach().cpu().numpy().swapaxes(0,1)
+    if isinstance(model, TiDEModel):
+        distr_args, loc, scale = model(
+            feat_static_real=torch.zeros((batch['past_values'].shape[0], 1), device=device),
+            feat_static_cat=batch["static_categorical_features"].to(device),
+            past_time_feat=batch["past_time_features"].to(device),
+            past_target=batch['past_values'].to(device),
+            past_observed_values=batch['past_observed_mask'].to(device),
+            future_time_feat=batch['future_time_features'].to(device),
+        )
+        predictions = model.distr_output.distribution(
+            distr_args, loc=loc, scale=scale
+        ).sample(torch.Size([10000])).detach().cpu().numpy().swapaxes(0,1)
     if isinstance(model, TimeSeriesTransformerForPrediction):
         predictions = model.generate(
             static_categorical_features=batch["static_categorical_features"].to(device) if config.num_static_categorical_features > 0 else None,
