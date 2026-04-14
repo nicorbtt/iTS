@@ -130,7 +130,7 @@ class PatchTSTModel(nn.Module):
         elif scaling == "std":
             self.scaler = StdScaler(keepdim=True)
         elif scaling == "mean demand":
-            self.scaler == MeanDemandScaler(keepdim=True)
+            self.scaler = MeanDemandScaler(keepdim=True)
         else:
             self.scaler = NOPScaler(keepdim=True)
 

@@ -20,7 +20,7 @@ from gluonts.core.component import validated
 from gluonts.torch.modules.feature import FeatureEmbedder
 from gluonts.model import Input, InputSpec
 from gluonts.torch.distributions import DistributionOutput
-from gluonts.torch.scaler import StdScaler, MeanScaler, NOPScaler
+from gluonts.torch.scaler import StdScaler, MeanScaler, NOPScaler, MeanDemandScaler
 from gluonts.torch.model.simple_feedforward import make_linear_layer
 from gluonts.torch.util import weighted_average
 
@@ -327,6 +327,8 @@ class TiDEModel(nn.Module):
             self.scaler = MeanScaler(keepdim=True)
         elif scaling == "std":
             self.scaler = StdScaler(keepdim=True)
+        elif scaling == "mean-demand":
+            self.scaler = MeanDemandScaler(keepdim=True)
         else:
             self.scaler = NOPScaler(keepdim=True)
 
