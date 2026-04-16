@@ -11,6 +11,9 @@ WORKDIR /usr
 COPY environment.yml .
 COPY packages/ ./packages/
 
+RUN conda install -n base -c conda-forge -y libgcc-ng libstdcxx-ng && \
+	conda clean -afy
+
 RUN conda env create -f environment.yml
 
 SHELL ["conda", "run", "-n", "ilocglob", "/bin/bash", "-c"]
