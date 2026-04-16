@@ -14,7 +14,7 @@ from measures import compute_intermittent_indicators, quantile_loss_, quantile_l
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="local vs global models for intermittent time series forecasting")
     parser.add_argument('--dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'crime', 'VN1', 'UCI'], required=True, help='Specify dataset name')
-    parser.add_argument('--model', type=str, choices=['ISQ', 'iETS', 'tweedieGP'], required=True, help="Specify model")
+    parser.add_argument('--model', type=str, choices=['ISQ', 'iETS', 'tweedieGP', 'MW'], required=True, help="Specify model")
     parser.add_argument('--silent', '-s', action='store_true', help='Silent, i.e. no verbose')
     parser.add_argument('--log', '-log', action='store_true', help='Whether to save the log')
     parser_args = parser.parse_args()

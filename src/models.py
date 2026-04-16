@@ -1,3 +1,5 @@
+import os
+import logging
 import numpy as np
 import torch
 from gluonts.torch.model.deepar.module import DeepARModel
@@ -27,7 +29,6 @@ from transformers import (
     AutoformerConfig,
     AutoformerForPrediction
 )
-from rpy2 import robjects
 
 from tweediegp.intermittent_gp import intermittentGP
 
@@ -621,7 +622,7 @@ class EarlyStop():
 
 class LocalModel:
     def __init__(self, model: str, data_info, qlevels =[0.5, 0.8, 0.9, 0.95, 0.99]) -> None:
-        assert model in ["ISQ", "iETS", "tweedieGP"]
+        assert model in ["ISQ", "iETS", "tweedieGP", "MW"]
         self.model = model
         self.h = data_info['h']
         self.qlevels = qlevels
@@ -637,14 +638,24 @@ class LocalModel:
                 n_samples=10000
             )
         if self.model == "iETS":
+            logging.getLogger("rpy2").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.situation").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface_lib").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface_lib.embedded").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface").setLevel(logging.ERROR)
             from rpy2 import robjects
+            from rpy2.robjects.packages import isinstalled
+            self.robjects = robjects
+            if not isinstalled("smooth"):
+                logging.info("R package 'smooth' is missing; installing it now.")
+                self.robjects.r("install.packages('smooth', repos='https://cloud.r-project.org')")
+            # self.robjects.r("if (!requireNamespace('forecast', quietly=TRUE)) install.packages('forecast', repos='https://cloud.r-project.org')")
             try:
                 import rpy2.rinterface_lib.callbacks as rpy2_callbacks
                 rpy2_callbacks.logger.setLevel("ERROR")  # silence embedded R chatter
                 rpy2_callbacks.consolewrite_print = lambda _: None
             except Exception:
                 pass
-            self.robjects = robjects
             self.iets = self.robjects.r(f"""
                 function(train_y_R) {{
                     set.seed(0)
@@ -654,6 +665,166 @@ class LocalModel:
                     list(as.numeric(pred$mean), pred$upper)
                 }}
             """)
+        if self.model == "MW":
+            logging.getLogger("rpy2.situation").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface_lib").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface_lib.embedded").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface").setLevel(logging.ERROR)
+            from rpy2 import robjects
+            seasonality = {"D":365, "W":52, "M":12}[data_info['freq']]
+            self.robjects = robjects
+            # self.robjects.r("if (!requireNamespace('smooth', quietly=TRUE)) install.packages('smooth', repos='https://cloud.r-project.org')")
+            # self.robjects.r("if (!requireNamespace('forecast', quietly=TRUE)) install.packages('forecast', repos='https://cloud.r-project.org')")
+            try:
+                import rpy2.rinterface_lib.callbacks as rpy2_callbacks
+                rpy2_callbacks.logger.setLevel("ERROR")
+                rpy2_callbacks.consolewrite_print = lambda _: None
+            except Exception:
+                pass
+            self.mw = self.robjects.r(f"""
+                function(train_y_R) {{
+                                    Bernoulli <- function(y, steps) {{
+                                        alpha <- -1
+                                        co <- mean(y[y > 0])
+                                        bern <- y
+                                        bern[bern > 0] <- 1
+                                        su <- bern[-1] + bern[-length(y)]
+                                        di <- bern[-1] - bern[-length(y)]
+                                        n00 <- length(su[su == 0])
+                                        n11 <- length(su[su == 2])
+                                        n01 <- length(di[di == -1])
+                                        n10 <- length(di[di == 1])
+                                        p00 <- n00 / (n00 + n10)
+                                        xi  <- n10 / (n10 + n00)
+                                        p   <- mean(bern)
+                                        lambda <- n11 / (n11 + n01)
+                                        if (n00 == 0 & n10 == 0) lambda <- 1
+                                        if (n11 == 0 & n01 == 0) lambda <- 0
+                                        if (lambda <= 0) lambda <- .0001
+                                        delta <- p00 + lambda - 1
+                                        if (lambda == 1) {{
+                                            p <- 1
+                                            xi <- 0
+                                            delta <- 1
+                                        }}
+
+                                        MC <- c()
+                                        MC[1] <- xi + delta * tail(bern, 1)
+                                        for (s in 2:steps) {{
+                                            MC[s] <- xi + delta * MC[s - 1]
+                                        }}
+
+                                        m <- v <- c()
+                                        m[1] <- 0
+                                        k <- (lambda^2 - 1 + sqrt(1 - lambda^2)) / lambda
+
+                                        for (t in 1:length(y)) {{
+                                            v[t] <- y[t] - bern[t] * co - m[t]
+                                            m[t + 1] <- lambda * m[t] + k * v[t]
+                                        }}
+
+                                        fo <- c()
+                                        for (s in 1:steps) {{
+                                            fo[s] <- co * MC[s] + lambda^(s - 1) * m[length(m)]
+                                        }}
+
+                                        list(bern, p, lambda, MC, delta, xi, fo, v, k)
+                                    }}
+
+                                    MW <- function(y, steps, qlevels) {{
+
+                                        mysum <- function(x, steps) {{
+                                            d <- 0
+                                            for (f in 0:(steps - 2)) d <- d + x^(f * 2)
+                                            d
+                                        }}
+
+                                        s <- {seasonality}
+                                        if ((length(y[y == 0]) / length(y)) < .95 && length(y) >= s) {{
+                                            h <- steps
+                                            cma <- matrix(NA, length(y), 1)
+
+                                            for (g in 1:(length(y) - s + 1)) {{
+                                                cma[g + ((s + 1) / 2) - 1] <- mean(y[g:(g + s - 1)])
+                                            }}
+
+                                            residuals <- y / cma
+
+                                            sfactors <- c()
+                                            for (seas in 1:s) {{
+                                                sfactors[seas] <- mean(na.omit(residuals[seq(seas, length(y) - s + seas, by = s)]))
+                                            }}
+
+                                            sfactout <- rep(sfactors, length(y) + h)[(length(y) + 1):(length(y) + h)]
+                                            y <- y / rep(sfactors, ceiling(length(y) / s))[1:length(y)]
+                                            y[is.na(y)] <- 0
+                                            y[y == Inf] <- 0
+
+                                        }} else {{
+                                            sfactout <- rep(1, steps)
+                                        }}
+
+                                        h <- c()
+                                        le <- max(1, floor({self.h} / 2))
+                                        max_iter <- ceiling(length(y) / le)
+
+                                        for (i in 0:max_iter) {{
+                                            Y <- tail(y, (length(y) - i * le))
+                                            if (length(Y) < le) break
+                                            ins <- head(Y, length(Y) - steps)
+
+                                            if ((length(ins[ins == 0]) / length(ins)) < .99 & length(ins) > 100) {{
+                                                h[i + 1] <- mean((tail(Y, steps) - Bernoulli(ins, steps)[[7]])^2)
+                                            }}
+                                        }}
+
+                                        if (length(h) != 0) {{
+                                            y <- tail(y, (length(y) - which.min(h[!is.na(h)]) * le) + steps)
+                                        }}
+
+                                        co <- mean(y[y > 0])
+                                        ma <- Bernoulli(y, steps)
+
+                                        bern   <- ma[[1]]
+                                        p      <- ma[[2]]
+                                        lambda <- ma[[3]]
+                                        MC     <- ma[[4]]
+                                        delta  <- ma[[5]]
+                                        fo     <- ma[[7]]
+                                        v      <- ma[[8]]
+                                        k      <- ma[[9]]
+
+                                        fo <- fo * sfactout
+
+                                        if (p < 1) {{
+                                            vari <- ((-1 + lambda) * (1 + lambda - 2 * p) * p) / (-1 + p)
+                                        }} else {{
+                                            vari <- 0
+                                        }}
+
+                                        Interv <- c()
+                                        Interv[1] <- vari * co^2 + var(v)
+                                        for (j in 2:steps) {{
+                                            Interv[j] <- vari * mysum(delta, j) * co^2 +
+                                                                     (var(v) * (1 + k^2 * (mysum(lambda, j))))
+                                        }}
+
+                                        qlevels[qlevels <= 0] <- 1e-4
+                                        qlevels[qlevels >= 1] <- 1 - 1e-4
+                                        z <- qnorm(qlevels)
+                                        quantiles <- sapply(z, function(zz) fo + zz * sqrt(Interv))
+
+                                        list(
+                                            mean = fo,
+                                            quantiles = quantiles
+                                        )
+                                    }}
+
+                                    set.seed(0)
+                                    pred <- MW(train_y_R, {self.h}, c({", ".join([str(q) for q in self.qlevels])}))
+                                    list(as.numeric(pred$mean), pred$quantiles)
+                                    }}
+                                """)
         
 
     def forecast(self, train_y):
@@ -675,5 +846,10 @@ class LocalModel:
             mean_forecast, samples = self.tweediegp.predict(self.test_x)
             mean_forecast = mean_forecast.detach().numpy()
             quantile_forecasts = np.quantile(samples.detach().numpy(), self.qlevels, axis=0).T
+        if self.model == 'MW':
+            train_y_R = self.robjects.FloatVector(train_y)
+            mw_fore = self.mw(train_y_R)
+            mean_forecast = np.array(mw_fore.rx2(1))
+            quantile_forecasts = np.array(mw_fore.rx2(2))
         return(mean_forecast, quantile_forecasts)
 
