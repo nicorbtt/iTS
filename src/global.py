@@ -5,7 +5,7 @@ os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = "0.0"
 from dataloader import load_raw, create_datasets, create_dataloaders
 from visual import learning_curves, Logger
 from models import ModelConfigBuilder, forward, predict, EarlyStop
-from measures import compute_intermittent_indicators, quantile_loss_, quantile_loss, quantile_loss_scaled_in_sample, rmsse  
+from measures import compute_intermittent_indicators, quantile_loss, quantile_loss_scaled_in_sample, rmsse, quantile_loss_scaled_mae
 
 import sys
 import argparse
@@ -13,7 +13,7 @@ from datetime import datetime
 import numpy as np
 import json
 import torch
-from gluonts.dataset.field_names import FieldName
+#from gluonts.dataset.field_names import FieldName
 from accelerate import Accelerator
 from torch.optim import AdamW
 import random
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         return model_params
     parser = argparse.ArgumentParser(description="iTS")
     parser.add_argument('--dataset_name', '--dataset-name', dest='dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'crime', 'VN1', 'UCI'], required=True, help='Specify dataset name')
-    parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer', 'patchTST', 'tide', 'feedforward', 'dlinear'], required=True, help="Specify model")
+    parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer', 'patchTST', 'tide', 'feedforward', 'dlinear', 'lightgbm'], required=True, help="Specify model")
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'hsnb', 'quantile', 'isqf', 'iqn'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
     parser.add_argument('--scaling', type=str, default=None, choices=['mase', 'mean', 'mean-demand', None], help="Specify scaling, default is None")
     parser.add_argument('--model_params', type=json_file_path, default=None, help='Specify the ventual path (.json file) of the model parameters, default is None')
@@ -214,6 +214,12 @@ if __name__ == "__main__":
             'intermittent_and_lumpy' : quantile_loss_scaled_in_sample(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
             'non-smooth': quantile_loss_scaled_in_sample(actuals[idx_non_smooth,:], quantile_forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
             },  
+        'quantile_loss_scaled_mae': {
+            'all' : quantile_loss_scaled_mae(actuals, quantile_forecasts, insample),
+            'intermittent' : quantile_loss_scaled_mae(actuals[idx_intermittent,:], quantile_forecasts[idx_intermittent,:,:], insample[idx_intermittent,:]),
+            'intermittent_and_lumpy' : quantile_loss_scaled_mae(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
+            'non-smooth': quantile_loss_scaled_mae(actuals[idx_non_smooth,:], quantile_forecasts[idx_non_smooth,:,:], insample[idx_non_smooth,:])
+            },
         'rmsse': {
             'all' : rmsse(actuals, mean_forecasts, insample),   
             'intermittent' : rmsse(actuals[idx_intermittent,:], mean_forecasts[idx_intermittent,:], insample[idx_intermittent,:]),
@@ -226,4 +232,5 @@ if __name__ == "__main__":
     logger.off()
 
     # to debug:
-    # --dataset_name Auto --model tide --distribution_head negbin --scaling mean-demand --cpu True
+    # --dataset_name Auto --model lightgbm --distribution_head negbin
+    # --dataset_name carparts --model dlinear --distribution_head negbin --scaling mean-demand --cpu True

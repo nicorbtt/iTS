@@ -138,6 +138,22 @@ def quantile_loss_scaled_in_sample_S(target: np.ndarray, forecast: np.ndarray, i
             tmp[i,:,j] = np.round(np.quantile(forecast[i], axis=1, q=quantiles[j]))
     return(quantile_loss_scaled_in_sample(target, tmp, insample, quantiles, avg))
 
+def quantile_loss_scaled_mae(target: np.ndarray, forecast: np.ndarray, insample: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
+    res = {}
+    scaling = np.mean(np.abs(insample[:, 1:] - insample[:, :-1]), axis=1)[:, None]
+    for j in range(len(quantiles)):
+        res['q'+str(quantiles[j])] = quantile_loss_(target/scaling, np.round(forecast[:,:,j])/scaling, quantiles[j], avg = avg)
+    return(res)
+
+def quantile_loss_scaled_mae_S(target: np.ndarray, forecast: np.ndarray, insample: np.ndarray, quantiles = [0.5, 0.8, 0.9, 0.95, 0.99], avg=True):
+    forecast = np.swapaxes(forecast, 1, 2)
+    tmp = np.empty(shape=(forecast.shape[0], forecast.shape[1], len(quantiles)))
+    for i in range(tmp.shape[0]):
+        for j in range(len(quantiles)):
+            tmp[i,:,j] = np.round(np.quantile(forecast[i], axis=1, q=quantiles[j]))
+    return(quantile_loss_scaled_mae(target, tmp, insample, quantiles, avg))
+
+
 def rmsse(target: np.ndarray, forecast: np.ndarray, insample: np.ndarray, avg=True):
     denom = np.mean((insample[:,1:] - insample[:,:-1])**2, axis=1)
     num = np.mean((target - forecast)**2, axis=1)

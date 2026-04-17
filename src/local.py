@@ -9,7 +9,7 @@ import json
 from dataloader import load_raw, create_datasets
 from visual import Logger
 from models import LocalModel
-from measures import compute_intermittent_indicators, quantile_loss_, quantile_loss, quantile_loss_scaled_in_sample, rmsse  
+from measures import compute_intermittent_indicators, quantile_loss_scaled_mae, quantile_loss, quantile_loss_scaled_in_sample, rmsse  
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="local vs global models for intermittent time series forecasting")
@@ -86,6 +86,12 @@ if __name__ == "__main__":
             'intermittent_and_lumpy' : quantile_loss_scaled_in_sample(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
             'non-smooth' : quantile_loss_scaled_in_sample(actuals[non_smooth,:], quantile_forecasts[non_smooth,:,:], insample[non_smooth,:])         
             },          
+        'quantile_loss_scaled_mae' : {
+            'all' : quantile_loss_scaled_mae(actuals, quantile_forecasts, insample),
+            'intermittent' : quantile_loss_scaled_mae(actuals[idx_intermittent,:], quantile_forecasts[idx_intermittent,:,:], insample[idx_intermittent,:]), 
+            'intermittent_and_lumpy' : quantile_loss_scaled_mae(actuals[idx_intermittent_and_lumpy,:], quantile_forecasts[idx_intermittent_and_lumpy,:,:], insample[idx_intermittent_and_lumpy,:]),
+            'non-smooth' : quantile_loss_scaled_mae(actuals[non_smooth,:], quantile_forecasts[non_smooth,:,:], insample[non_smooth,:])         
+            },
         'rmsse': {
             'all' : rmsse(actuals, mean_forecasts, insample),
             'intermittent' : rmsse(actuals[idx_intermittent,:], mean_forecasts[idx_intermittent,:], insample[idx_intermittent,:]),
