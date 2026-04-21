@@ -1,12 +1,11 @@
 name: ilocglob
 channels:
   - conda-forge
-  - defaults
 dependencies:
-  - python=3.9
+  - python=3.10
   - pip
-  - libstdcxx-ng
-  - libgcc-ng
+  # - libstdcxx-ng
+  # - libgcc-ng
   - icu
   - r-base
   - rpy2
@@ -19,6 +18,9 @@ dependencies:
     - scipy
     - pandas 
     - matplotlib
+    - seaborn>=0.13.0,<0.14.0
+    - optuna>=3.5.0,<4.4
+    - optuna-integration
     - ipykernel
     - accelerate
     - datasets
@@ -27,3 +29,4 @@ dependencies:
     - -e ./packages/gluon-ts
     - -e ./packages/transformers
     - -e ./packages/tweediegp
+    - -e ./packages/lightgbmlss
