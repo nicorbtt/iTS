@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-
+import json
 
 
 # Plot learning curves
@@ -55,7 +55,14 @@ class Logger():
     def log_epoch(self, epoch, history):
         if not self.disable: 
             logging.info(f"Epoch {epoch+1} \t Train Loss: {history['train_loss'][-1]:.3f} \t Val Loss: {history['val_loss'][-1]:.3f}")
-    
+
+    def log_iter(self, iter, params, loss, best_iter):
+        if not self.disable:
+            dont_show = ['metric', 'objective', 'verbose', 'random_seed', 'num_class', 'num_threads', 'device']
+            approx_params = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in params.items() if k not in dont_show}
+            params_str = json.dumps(approx_params, indent=2)
+            logging.info(f"Iter {iter+1} \tLoss: {loss:.3f} \tBest Iter: {best_iter} \tParams:\n{params_str}")
+
     def log_earlystop_newbest(self, best_val_loss):
         if not self.disable: 
             logging.info(f"Early stopping, new validation best: {best_val_loss:.3f}, keep training!")

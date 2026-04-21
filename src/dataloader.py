@@ -35,6 +35,8 @@ from gluonts.time_feature import (
 
 from transformers import PretrainedConfig
 
+import lightgbm as lgb
+
 
 
 ### Datasets Metadata
@@ -360,14 +362,12 @@ def create_dataloaders(config, datasets, data_info, batch_size=128, num_batches_
                 'num_feat_dynamic_real' : 'num_dynamic_real_features',
                 'lags_seq' : 'lags_sequence'
             }.get(k, k): v for k, v in config.items()}
-    else:
-        config = config.__dict__
     
     train_dataloader = create_train_dataloader(config=config, 
                                                freq=data_info['freq'], 
                                                data=datasets['train'], 
                                                batch_size=batch_size, 
-                                               num_batches_per_epoch=num_batches_per_epoch)
+                                               num_batches_per_epoch=num_batches_per_epoch)   
     valid_dataloader = create_backtest_dataloader(config=config, 
                                                   freq=data_info['freq'], 
                                                   data=datasets['valid'],
@@ -377,3 +377,102 @@ def create_dataloaders(config, datasets, data_info, batch_size=128, num_batches_
                                              data=datasets['test'], 
                                              batch_size=batch_size)
     return (train_dataloader, valid_dataloader, test_dataloader)
+    
+
+
+def create_tabular(config, datasets, data_info, train_tab_len = None):
+
+    # hack ;)
+    if not isinstance(config, PretrainedConfig):
+        config = {
+            {
+                'num_feat_static_cat' : 'num_static_categorical_features',
+                'num_feat_static_real' : 'num_static_real_features',
+                'num_feat_dynamic_real' : 'num_dynamic_real_features',
+                'lags_seq' : 'lags_sequence'
+            }.get(k, k): v for k, v in config.items()}
+    else:
+        config = config.__dict__
+
+    forecasts = "multitarget"
+    train_tab_len = 10 * len(datasets['train']) if train_tab_len is None else train_tab_len
+    
+    train_dataloader = create_train_dataloader(config=config, 
+                                               freq=data_info['freq'], 
+                                               data=datasets['train'], 
+                                               batch_size=train_tab_len, 
+                                               num_batches_per_epoch=1)
+
+    tab_indices = np.random.randint(0, data_info['h'], size=train_tab_len)
+    batch = next(iter(train_dataloader))
+    X = np.concatenate([
+        batch['static_categorical_features'].numpy(),
+        batch['past_values'][:, -config['context_length']:].numpy(),
+        batch['past_time_features'][:, -config['context_length']:, -1].numpy()
+    ], axis=1)
+
+    if forecasts == "autoregressive":
+        X = np.concatenate([X, batch['future_time_features'][:, 0, -1].numpy().reshape(train_tab_len, -1)], axis=1)
+        y = batch['future_target'][:, -1].numpy()
+
+    if forecasts == "multitarget":
+        tab_indices = np.random.randint(0, data_info['h'], size=train_tab_len)
+        X = np.concatenate([
+            X, 
+            np.array([batch['future_time_features'][i, j, -1].numpy().item() for i, j in enumerate(tab_indices)]).reshape(train_tab_len, -1), 
+            tab_indices.reshape(train_tab_len, 1)
+            ], axis=1)
+        y = np.array([batch['future_values'][i, j].numpy().item() for i, j in enumerate(tab_indices)])
+
+    train_tabular = (X, y)#lgb.Dataset(X, label=y, categorical_feature=[0])
+
+    valid_dataloader = create_backtest_dataloader(config=config, 
+                                                  freq=data_info['freq'], 
+                                                  data=datasets['valid'],
+                                                  batch_size=len(datasets['valid']))
+    
+    batch = next(iter(valid_dataloader))
+    X = np.concatenate([
+            batch['static_categorical_features'].numpy(),
+            batch['past_values'][:, -config['context_length']:].numpy(),
+            batch['past_time_features'][:, -config['context_length']:, -1].numpy(),
+        ], axis=1)
+
+    if forecasts == "autoregressive":
+        X = np.concatenate([X, batch['future_time_features'][:, 0, -1].numpy().reshape(-1, 1)], axis=1)
+        y = batch['future_target'][:, 0].numpy()
+
+    if forecasts == "multitarget":
+        X = np.concatenate([
+            np.concatenate([X]*data_info['h'], axis=0),
+            np.repeat(batch['future_time_features'][0, :, -1].numpy(), len(datasets['train'])).reshape(-1, 1),
+            np.repeat(np.arange(data_info['h']), len(datasets['train'])).reshape(-1, 1),
+            ], axis=1)    
+        y = np.concatenate([batch['future_values'][:, i].numpy() for i in range(data_info['h'])])
+
+    valid_tabular = (X, y)
+
+    test_dataloader = create_test_dataloader(config=config, 
+                                             freq=data_info['freq'], 
+                                             data=datasets['test'], 
+                                             batch_size=len(datasets['test']))
+    batch = next(iter(test_dataloader))
+    X = np.concatenate([
+            batch['static_categorical_features'].numpy(),
+            batch['past_values'][:, -config['context_length']:].numpy(),
+            batch['past_time_features'][:, -config['context_length']:, -1].numpy(),
+        ], axis=1)
+
+    if forecasts == "autoregressive":
+        X = np.concatenate([X, batch['future_time_features'][:, 0, -1].numpy().reshape(-1, 1)], axis=1)
+
+    if forecasts == "multitarget":
+        X = np.concatenate([
+            np.concatenate([X]*data_info['h'], axis=0),
+            np.repeat(batch['future_time_features'][0, :, -1].numpy(), len(datasets['test'])).reshape(-1, 1),
+            np.repeat(np.arange(data_info['h']), len(datasets['test'])).reshape(-1, 1),
+            ], axis=1)
+        
+    test_tabular = (X, None)
+
+    return (train_tabular, valid_tabular, test_tabular)

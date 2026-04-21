@@ -2,6 +2,7 @@ import os
 import logging
 import numpy as np
 import torch
+torch.set_num_threads(1)
 from gluonts.torch.model.deepar.module import DeepARModel
 from gluonts.torch.model.simple_feedforward.module import SimpleFeedForwardModel
 from gluonts.torch.model.d_linear.module import DLinearModel
@@ -29,6 +30,12 @@ from transformers import (
     AutoformerConfig,
     AutoformerForPrediction
 )
+from lightgbmlss.model import LightGBMLSS
+from lightgbmlss.distributions.NegativeBinomial import NegativeBinomial
+# from lightgbmlss.distributions.Tweedie import Tweedie
+# from lightgbmlss.distributions.ZeroInflatedNegativeBinomial import ZeroInflatedNegativeBinomial
+
+torch.set_num_threads(1)
 
 from tweediegp.intermittent_gp import intermittentGP
 
@@ -36,7 +43,7 @@ from tweediegp.intermittent_gp import intermittentGP
 class ModelConfigBuilder:
     
     def __init__(self, model, distribution_head, scaling):
-        assert model in ["deepAR", "transformer", "informer", "autoformer", "patchTST", "tide", "dlinear", "feedforward"]
+        assert model in ["deepAR", "transformer", "informer", "autoformer", "patchTST", "tide", "dlinear", "feedforward", "lightgbm"]
         assert distribution_head in ["poisson","negbin", "tweedie", "hsp", "hsnb"]
         assert scaling in ["mase", "mean", "mean-demand", None]
         self.model = model
@@ -84,6 +91,9 @@ class ModelConfigBuilder:
             'temporal_hidden_dim', 'distr_hidden_dim', 'decoder_output_dim',
             'dropout_rate', 'num_layers_encoder', 'num_layers_decoder',
             'layer_norm', 'embedding_dimension'
+        }
+        self._TUNABLE_PARAMS_LIGHTGBM = {
+            'context_length', 'prediction_length', 'dist'
         }
         self.params = None
 
@@ -342,10 +352,9 @@ class ModelConfigBuilder:
             self.params = {
                 'context_length' : _check('context_length', data_info['h']*data_info['w']),
                 'prediction_length' : _check('prediction_length', data_info['h']),
-                # Keep base config minimal; runtime dimensions are adapted in get_model.
                 'num_feat_dynamic_real' : 0,
                 'num_feat_dynamic_proj' : _check('num_feat_dynamic_proj', 2),
-                'num_feat_static_real' : 1,
+                'num_feat_static_real' : 0,
                 'num_feat_static_cat' : 1,
                 'cardinality' : [data_info['N']],
                 'embedding_dimension' : _check('embedding_dimension', [3]),
@@ -395,6 +404,21 @@ class ModelConfigBuilder:
                     }[self.scaling] if self.scaling else False
             }
 
+        if self.model == "lightgbm":
+            if not set(kwargs.keys()).issubset(self._TUNABLE_PARAMS_LIGHTGBM):
+                raise ValueError(f"Non-tunable parameter found \nThe set of possible parameter is {self._TUNABLE_PARAMS_LIGHTGBM}")
+            if self.scaling is not None:
+                raise ValueError("Scaling is not supported for LightGBM distributional models.")
+            self.params = {
+                'dist' : self.distribution_head,
+                'prediction_length' : _check('prediction_length', data_info['h']),
+                'context_length' : _check('context_length', data_info['h']*data_info['w']),
+                'lags_seq' : lags_sequence,
+                'num_feat_dynamic_real' : 0,
+                'num_feat_static_real' : 0,
+                'num_feat_static_cat' : 1,
+            }
+
     ### Create Model
     def get_model(self):
         if self.model == "deepAR" : 
@@ -415,6 +439,12 @@ class ModelConfigBuilder:
             return(SimpleFeedForwardModel(**self.params))
         if self.model == "dlinear":
             return(DLinearModel(**self.params))
+        if self.model == "lightgbm":
+            return(LightGBMLSS(dist = {
+                        'negbin' : NegativeBinomial(response_fn_total_count='softplus'),
+                        # 'tweedie' : Tweedie(),
+                        # 'hsnb' : HurdleShiftedNegativeBinomial()
+                    }[self.params['dist']]))
     
     ### Export config
     def export_config(self):
@@ -435,6 +465,8 @@ class ModelConfigBuilder:
             return {key: self.params[key] for key in self._TUNABLE_PARAMS_PATCHTST}
         elif self.model == 'tide':
             return {key: self.params[key] for key in self._TUNABLE_PARAMS_TIDE}
+        elif self.model == 'lightgbm':
+            return {key: self.params[key] for key in self._TUNABLE_PARAMS_LIGHTGBM}
 
 ### Forward step
 def forward(model, batch, device, config):
@@ -516,13 +548,27 @@ def forward(model, batch, device, config):
             past_observed_values = batch['past_observed_mask'].to(device),
             future_observed_values = batch['future_observed_mask'].to(device),
         ).mean()
+    if isinstance(model, LightGBMLSS):
+        X, y = batch
+        params_pred = model.predict(X, pred_type="parameters").values  
+        _, nll = model.dist.get_params_loss(params_pred, 
+                                            torch.tensor(y).reshape(-1, 1),
+                                            start_values = [None]*params_pred.shape[1], 
+                                            requires_grad=False)
+        loss = (nll / len(y)).item()
     return(loss)
+
+# # # 2. Prepare target and start_values
+# target = torch.tensor(y.reshape(-1, 1))
+# start_values = [0.5] * lgblss.dist.n_dist_param  # Use model.start_values or distribution default
+
+# # # 3. Compute NLL
+# _, nll = lgblss.dist.get_params_loss(params_pred, target, start_values, requires_grad=False)
+#     return(loss)
 
 ### Generate forecasts
 def predict(model, batch, device, config):
     predictions = None
-    def _ensure_channel_dim(tensor):
-        return tensor.unsqueeze(-1) if tensor.dim() == 2 else tensor
     if isinstance(model, PatchTSTModel):
         distr_args, loc, scale = model(
             past_target = batch['past_values'].to(device),
@@ -595,7 +641,10 @@ def predict(model, batch, device, config):
         predictions = model.distr_output.distribution(
             distr_args, loc=loc, scale=scale
             ).sample(torch.Size([10000])).detach().cpu().numpy().swapaxes(0,1)
+    if isinstance(model, LightGBMLSS):
+        predictions = model.predict(batch, pred_type="samples", n_samples=10000).values
     return(predictions)
+
 
 class EarlyStop():
     def __init__(self, logger, patience=20, min_delta = 0.001) -> None:
@@ -618,6 +667,56 @@ class EarlyStop():
             if self.current_patience == self.patience:
                 self.logger.log_earlystop_stop(epoch, self.best_val_loss)
                 self.stop = True
+
+class ParamSampler():
+
+    def __init__(self, param_space=None):
+        self.param_space = param_space or {
+            "learning_rate": ("float", {"low": 1e-4, "high": 0.1, "log": True}),
+            "max_depth": ("int", {"low": 1, "high": 10, "log": False}),
+            "num_leaves": ("int", {"low": 2, "high": 200, "log": True}),
+            "min_data_in_leaf": ("int", {"low": 1, "high": 64, "log": True}),
+            "min_gain_to_split": ("float", {"low": 1e-8, "high": 40.0, "log": False}),
+            "min_sum_hessian_in_leaf": ("float", {"low": 1e-8, "high": 40.0, "log": True}),
+            "subsample": ("float", {"low": 0.7, "high": 1.0, "log": False}),
+            "feature_fraction": ("float", {"low": 0.4, "high": 1.0, "log": False}),
+            "boosting": ("categorical", ["gbdt"]),
+            "num_threads": ("none", [1]),
+            "num_boost_round": ("int", {"low": 20, "high": 1000, "log": False}),
+        }
+        self.best_val_loss = float('inf')
+        self.best_params = None
+        self.best_iter = None
+        self.best_model = None
+
+    def sample(self):
+        params = {}
+        for k, (ptype, spec) in self.param_space.items():
+            if ptype == "float":
+                low, high = spec["low"], spec["high"]
+                if spec.get("log", False):
+                    val = float(np.exp(np.random.uniform(np.log(low), np.log(high))))
+                else:
+                    val = float(np.random.uniform(low, high))
+                params[k] = val
+            elif ptype == "int":
+                low, high = spec["low"], spec["high"]
+                val = int(np.random.randint(low, high + 1))
+                params[k] = val
+            elif ptype == "categorical":
+                val = np.random.choice(spec)
+                params[k] = val
+            elif ptype == "none":
+                params[k] = spec[0]
+        return params
+    
+    def update(self, loss, params, model=None, iter_num=None):
+        if loss < self.best_val_loss:
+            self.best_val_loss = loss
+            self.best_params = params.copy()
+            self.best_iter = iter_num
+            if model is not None:
+                self.best_model = model
 
 
 class LocalModel:
@@ -649,7 +748,9 @@ class LocalModel:
             if not isinstalled("smooth"):
                 logging.info("R package 'smooth' is missing; installing it now.")
                 self.robjects.r("install.packages('smooth', repos='https://cloud.r-project.org')")
-            # self.robjects.r("if (!requireNamespace('forecast', quietly=TRUE)) install.packages('forecast', repos='https://cloud.r-project.org')")
+            if not isinstalled("forecast"):
+                logging.info("R package 'forecast' is missing; installing it now.")
+                self.robjects.r("if (!requireNamespace('forecast', quietly=TRUE)) install.packages('forecast', repos='https://cloud.r-project.org')")
             try:
                 import rpy2.rinterface_lib.callbacks as rpy2_callbacks
                 rpy2_callbacks.logger.setLevel("ERROR")  # silence embedded R chatter
