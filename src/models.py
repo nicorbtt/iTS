@@ -2,7 +2,6 @@ import os
 import logging
 import numpy as np
 import torch
-torch.set_num_threads(1)
 from gluonts.torch.model.deepar.module import DeepARModel
 from gluonts.torch.model.simple_feedforward.module import SimpleFeedForwardModel
 from gluonts.torch.model.d_linear.module import DLinearModel
@@ -32,8 +31,8 @@ from transformers import (
 )
 from lightgbmlss.model import LightGBMLSS
 from lightgbmlss.distributions.NegativeBinomial import NegativeBinomial
-# from lightgbmlss.distributions.Tweedie import Tweedie
-# from lightgbmlss.distributions.ZeroInflatedNegativeBinomial import ZeroInflatedNegativeBinomial
+from lightgbmlss.distributions.Tweedie import TweedieDistribution
+from lightgbmlss.distributions.HurdleShiftedNegativeBinomial import HurdleShiftedNegativeBinomial
 
 torch.set_num_threads(1)
 
@@ -442,8 +441,8 @@ class ModelConfigBuilder:
         if self.model == "lightgbm":
             return(LightGBMLSS(dist = {
                         'negbin' : NegativeBinomial(response_fn_total_count='softplus'),
-                        # 'tweedie' : Tweedie(),
-                        # 'hsnb' : HurdleShiftedNegativeBinomial()
+                        'tweedie' : TweedieDistribution(response_fn_mu='softplus', response_fn_phi='softplus', response_fn_rho='sigmoid_rho'),
+                        'hsnb' : HurdleShiftedNegativeBinomial(response_fn_total_count='softplus', response_fn_logits='identity', response_fn_p_zero='sigmoid')
                     }[self.params['dist']]))
     
     ### Export config
@@ -680,9 +679,10 @@ class ParamSampler():
             "min_sum_hessian_in_leaf": ("float", {"low": 1e-8, "high": 40.0, "log": True}),
             "subsample": ("float", {"low": 0.7, "high": 1.0, "log": False}),
             "feature_fraction": ("float", {"low": 0.4, "high": 1.0, "log": False}),
-            "boosting": ("categorical", ["gbdt"]),
-            "num_threads": ("none", [1]),
             "num_boost_round": ("int", {"low": 20, "high": 1000, "log": False}),
+            "boosting": ("categorical", ["gbdt"]),
+            "device": ("categorical", ["cpu"]),
+            "num_threads": ("none", [1]),
         }
         self.best_val_loss = float('inf')
         self.best_params = None
@@ -721,7 +721,7 @@ class ParamSampler():
 
 class LocalModel:
     def __init__(self, model: str, data_info, qlevels =[0.5, 0.8, 0.9, 0.95, 0.99]) -> None:
-        assert model in ["ISQ", "iETS", "tweedieGP", "MW"]
+        assert model in ["ISQ", "iETS", "tweedieGP", "MW", "gasNB"]
         self.model = model
         self.h = data_info['h']
         self.qlevels = qlevels
@@ -926,6 +926,146 @@ class LocalModel:
                                     list(as.numeric(pred$mean), pred$quantiles)
                                     }}
                                 """)
+        if self.model == "gasNB":
+            logging.getLogger("rpy2").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.situation").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface_lib").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface_lib.embedded").setLevel(logging.ERROR)
+            logging.getLogger("rpy2.rinterface").setLevel(logging.ERROR)
+            from rpy2 import robjects
+            from rpy2.robjects.packages import isinstalled
+            period_len = {"D": 7, "W": 52, "M": 12}[data_info['freq']]
+            self.robjects = robjects
+            if not isinstalled("nloptr"):
+                logging.info("R package 'nloptr' is missing; installing it now.")
+                self.robjects.r("install.packages('nloptr', repos='https://cloud.r-project.org')")
+            try:
+                import rpy2.rinterface_lib.callbacks as rpy2_callbacks
+                rpy2_callbacks.logger.setLevel("ERROR")
+                rpy2_callbacks.consolewrite_print = lambda _: None
+            except Exception:
+                pass
+            self.gasnb = self.robjects.r(f"""
+                function(train_y_R) {{
+                    epsilon <- 1e-4
+                    period_len <- {period_len}
+                    h <- {self.h}
+
+                    gas_filter <- function(y, period_len, psi0, phi, rho, xi0, k, alpha) {{
+                        n <- length(y)
+                        psi <- psi0
+                        xi <- rep(xi0, period_len)
+                        f <- numeric(n)
+
+                        for (t in 1:n) {{
+                            if (t == 1) {{
+                                score <- 0
+                            }} else {{
+                                score <- (y[t - 1] - f[t - 1]) / (1 + f[t - 1] / alpha)
+                            }}
+
+                            psi <- phi * psi + rho * score
+
+                            if (period_len > 1) {{
+                                season <- ((t - 1) %% period_len) + 1
+                                past_season <- ifelse(season == 1, period_len, season - 1)
+                                xi[past_season] <- xi[past_season] + k * score
+                                xi[-past_season] <- xi[-past_season] - k / (period_len - 1) * score
+                                gamma <- xi[season]
+                                f[t] <- exp(psi + gamma)
+                            }} else {{
+                                f[t] <- exp(psi)
+                            }}
+                        }}
+
+                        list(f = f, last_psi = psi, last_xi = xi)
+                    }}
+
+                    nll <- function(y, period_len, psi0, phi, rho, xi0, k, alpha) {{
+                        res <- gas_filter(y, period_len, psi0, phi, rho, xi0, k, alpha)
+                        f <- res$f
+                        l <- -sum(dnbinom(y, size = alpha, mu = f, log = TRUE))
+                        if (any(!is.finite(f)) || !is.finite(l)) {{
+                            return(1 / epsilon)
+                        }} else {{
+                            return(l)
+                        }}
+                    }}
+
+                    mean_y <- mean(train_y_R)
+                    max_y <- max(train_y_R)
+                    lb <- c(log(epsilon), -1 + epsilon, epsilon, log(epsilon), epsilon, epsilon)
+                    ub <- c(log(max(max_y, epsilon)), 1 - epsilon, 1 - epsilon, log(max(max_y, epsilon)), 1 - epsilon, Inf)
+                    x0 <- c(log(max(mean_y, epsilon)) * 2 / 3, 0, 0.1, log(max(mean_y, epsilon)) / 3, 0.1, max(mean_y, epsilon))
+
+                    eval_f <- function(x) {{
+                        value <- tryCatch(
+                            nll(train_y_R, period_len, x[1], x[2], x[3], x[4], x[5], x[6]),
+                            error = function(e) 1 / epsilon
+                        )
+                        if (!is.finite(value)) {{
+                            value <- 1 / epsilon
+                        }}
+                        value
+                    }}
+
+                    sol <- nloptr::nloptr(
+                        x0 = x0,
+                        eval_f = eval_f,
+                        lb = lb,
+                        ub = ub,
+                        opts = list(
+                            algorithm = "NLOPT_LN_COBYLA",
+                            ftol_rel = 1e-4,
+                            maxeval = 500,
+                            print_level = 0
+                        )
+                    )
+
+                    if (!is.finite(sol$objective) || sol$objective == 1 / epsilon) {{
+                        stop("Optimization failed to find a finite solution.")
+                    }}
+
+                    psi <- sol$solution[1]
+                    phi <- sol$solution[2]
+                    rho <- sol$solution[3]
+                    xi0 <- sol$solution[4]
+                    k <- sol$solution[5]
+                    alpha <- sol$solution[6]
+
+                    filter <- gas_filter(train_y_R, period_len, psi, phi, rho, xi0, k, alpha)
+
+                    n_samples <- 10000
+                    f_state <- rep(filter$f[length(train_y_R)], n_samples)
+                    psi_state <- rep(filter$last_psi, n_samples)
+                    xi_state <- matrix(rep(filter$last_xi, n_samples), nrow = period_len)
+                    y_state <- rep(train_y_R[length(train_y_R)], n_samples)
+
+                    fc_samples <- matrix(NA, nrow = n_samples, ncol = h)
+                    for (i in 1:h) {{
+                        score <- (y_state - f_state) / (1 + f_state / alpha)
+                        psi_state <- phi * psi_state + rho * score
+
+                        if (period_len > 1) {{
+                            season <- ((length(train_y_R) + i - 1) %% period_len) + 1
+                            past_season <- ifelse(season == 1, period_len, season - 1)
+                            xi_state[past_season, ] <- xi_state[past_season, ] + k * score
+                            xi_state[-past_season, ] <- xi_state[-past_season, ] - k / (period_len - 1) * score
+                            gamma <- xi_state[season, ]
+                            f_state <- exp(psi_state + gamma)
+                        }} else {{
+                            f_state <- exp(psi_state)
+                        }}
+
+                        y_state <- rnbinom(n_samples, size = alpha, mu = f_state)
+                        fc_samples[, i] <- y_state
+                    }}
+
+                    mean_fc <- colMeans(fc_samples)
+                    quantile_fc <- apply(fc_samples, 2, quantile, probs = c({", ".join([str(q) for q in self.qlevels])}))
+                    list(mean_fc, t(quantile_fc))
+                }}
+            """)
         
 
     def forecast(self, train_y):
@@ -952,5 +1092,10 @@ class LocalModel:
             mw_fore = self.mw(train_y_R)
             mean_forecast = np.array(mw_fore.rx2(1))
             quantile_forecasts = np.array(mw_fore.rx2(2))
+        if self.model == 'gasNB':
+            train_y_R = self.robjects.FloatVector(train_y)
+            gasnb_fore = self.gasnb(train_y_R)
+            mean_forecast = np.array(gasnb_fore.rx2(1))
+            quantile_forecasts = np.array(gasnb_fore.rx2(2))
         return(mean_forecast, quantile_forecasts)
 

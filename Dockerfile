@@ -16,6 +16,8 @@ RUN conda install -n base -c conda-forge -y libgcc-ng libstdcxx-ng && \
 
 RUN conda env create -f environment.yml
 
+RUN conda run -n ilocglob Rscript -e "install.packages(c('smooth', 'forecast', 'nloptr'), repos='https://cloud.r-project.org')"
+
 SHELL ["conda", "run", "-n", "ilocglob", "/bin/bash", "-c"]
 
 RUN mkdir -p /opt/trained_models
