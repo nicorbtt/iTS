@@ -833,59 +833,51 @@ class LocalModel:
                                     }}
 
                                     MW <- function(y, steps, qlevels) {{
-
                                         mysum <- function(x, steps) {{
                                             d <- 0
                                             for (f in 0:(steps - 2)) d <- d + x^(f * 2)
                                             d
                                         }}
-
                                         s <- {seasonality}
                                         if ((length(y[y == 0]) / length(y)) < .95 && length(y) >= s) {{
                                             h <- steps
                                             cma <- matrix(NA, length(y), 1)
-
                                             for (g in 1:(length(y) - s + 1)) {{
                                                 cma[g + ((s + 1) / 2) - 1] <- mean(y[g:(g + s - 1)])
                                             }}
-
                                             residuals <- y / cma
-
                                             sfactors <- c()
                                             for (seas in 1:s) {{
                                                 sfactors[seas] <- mean(na.omit(residuals[seq(seas, length(y) - s + seas, by = s)]))
                                             }}
-
                                             sfactout <- rep(sfactors, length(y) + h)[(length(y) + 1):(length(y) + h)]
-                                            y <- y / rep(sfactors, ceiling(length(y) / s))[1:length(y)]
-                                            y[is.na(y)] <- 0
-                                            y[y == Inf] <- 0
-
+                                            if (!any(is.na(sfactors))){{
+                                                sfactout <- rep(sfactors, length(y) + h)[(length(y) + 1):(length(y) + h)]
+                                                y <- y / rep(sfactors, ceiling(length(y) / s))[1:length(y)]
+                                                y[is.na(y)] <- 0
+                                                y[y == Inf] <- 0
+                                            }} else {{
+                                                sfactout <- rep(1, steps)
+                                            }}
                                         }} else {{
                                             sfactout <- rep(1, steps)
                                         }}
-
                                         h <- c()
-                                        le <- max(1, floor({self.h} / 2))
+                                        le <- max(1, floor(steps / 2))
                                         max_iter <- ceiling(length(y) / le)
-
                                         for (i in 0:max_iter) {{
                                             Y <- tail(y, (length(y) - i * le))
                                             if (length(Y) < le) break
                                             ins <- head(Y, length(Y) - steps)
-
-                                            if ((length(ins[ins == 0]) / length(ins)) < .99 & length(ins) > 100) {{
+                                            if ((length(ins[ins == 0]) / length(ins)) < .99 & length(ins) > (4*steps)) {{
                                                 h[i + 1] <- mean((tail(Y, steps) - Bernoulli(ins, steps)[[7]])^2)
                                             }}
                                         }}
-
                                         if (length(h) != 0) {{
                                             y <- tail(y, (length(y) - which.min(h[!is.na(h)]) * le) + steps)
                                         }}
-
                                         co <- mean(y[y > 0])
                                         ma <- Bernoulli(y, steps)
-
                                         bern   <- ma[[1]]
                                         p      <- ma[[2]]
                                         lambda <- ma[[3]]
@@ -894,27 +886,21 @@ class LocalModel:
                                         fo     <- ma[[7]]
                                         v      <- ma[[8]]
                                         k      <- ma[[9]]
-
                                         fo <- fo * sfactout
-
                                         if (p < 1) {{
                                             vari <- ((-1 + lambda) * (1 + lambda - 2 * p) * p) / (-1 + p)
                                         }} else {{
                                             vari <- 0
                                         }}
-
                                         Interv <- c()
                                         Interv[1] <- vari * co^2 + var(v)
                                         for (j in 2:steps) {{
-                                            Interv[j] <- vari * mysum(delta, j) * co^2 +
-                                                                     (var(v) * (1 + k^2 * (mysum(lambda, j))))
+                                            Interv[j] <- vari * mysum(delta, j) * co^2 + (var(v) * (1 + k^2 * (mysum(lambda, j))))
                                         }}
-
                                         qlevels[qlevels <= 0] <- 1e-4
                                         qlevels[qlevels >= 1] <- 1 - 1e-4
                                         z <- qnorm(qlevels)
                                         quantiles <- sapply(z, function(zz) fo + zz * sqrt(Interv))
-
                                         list(
                                             mean = fo,
                                             quantiles = quantiles
@@ -1080,11 +1066,22 @@ class LocalModel:
             mean_forecast = np.array(iets_fore.rx2(1))
             quantile_forecasts = np.array(iets_fore.rx2(2))
         if self.model == 'tweedieGP':
-            torch.manual_seed(0)
             train_y = torch.tensor(train_y, dtype=torch.float32)
-            self.tweediegp.build(self.train_x, train_y)
-            self.tweediegp.fit(self.train_x, train_y)
-            mean_forecast, samples = self.tweediegp.predict(self.test_x)
+            max_attempts = 5
+            last_error = None
+
+            for attempt in range(max_attempts):
+                torch.manual_seed(attempt)
+                self.tweediegp.build(self.train_x, train_y)
+                try:
+                    self.tweediegp.fit(self.train_x, train_y)
+                    mean_forecast, samples = self.tweediegp.predict(self.test_x)
+                    last_error = None
+                    break
+                except Exception as err:
+                    last_error = err
+            if last_error is not None:
+                raise last_error
             mean_forecast = mean_forecast.detach().numpy()
             quantile_forecasts = np.quantile(samples.detach().numpy(), self.qlevels, axis=0).T
         if self.model == 'MW':
