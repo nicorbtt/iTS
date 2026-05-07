@@ -59,9 +59,17 @@ class Logger():
     def log_iter(self, iter, params, loss, best_iter):
         if not self.disable:
             dont_show = ['metric', 'objective', 'verbose', 'random_seed', 'num_class', 'num_threads', 'device']
-            approx_params = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in params.items() if k not in dont_show}
+
+            def _to_jsonable(v):
+                if isinstance(v, np.generic):
+                    v = v.item()
+                if isinstance(v, float):
+                    return round(v, 3)
+                return v
+
+            approx_params = {k: _to_jsonable(v) for k, v in params.items() if k not in dont_show}
             params_str = json.dumps(approx_params, indent=2)
-            logging.info(f"Iter {iter+1} \tLoss: {loss:.3f} \tBest Iter: {best_iter} \tParams:\n{params_str}")
+            logging.info(f"Iter {iter+1} \tLoss: {loss:.3f} \tBest Iter: {best_iter+1} \tParams:\t{params_str}")
 
     def log_earlystop_newbest(self, best_val_loss):
         if not self.disable: 

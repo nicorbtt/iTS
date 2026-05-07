@@ -1,11 +1,18 @@
-
-# Thread limiting for OMP/MKL/BLAS stability
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
+import sys
+import argparse
+from datetime import datetime
+import numpy as np
+import json
+import torch
+
+if not os.environ.get("IS_DOCKER") == "1":
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    torch.set_num_threads(1)
 os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = "1"
 os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = "0.0"
 
@@ -14,13 +21,6 @@ from visual import learning_curves, Logger
 from models import ModelConfigBuilder, forward, predict, EarlyStop, ParamSampler
 from measures import compute_intermittent_indicators, quantile_loss, quantile_loss_scaled_in_sample, rmsse, quantile_loss_scaled_mae
 
-import sys
-import argparse
-from datetime import datetime
-import numpy as np
-import json
-import torch
-torch.set_num_threads(1)
 from torch.optim import AdamW
 from accelerate import Accelerator
 import lightgbm as lgb
@@ -34,7 +34,7 @@ if __name__ == "__main__":
         if not model_params.lower().endswith('.json'):
             raise argparse.ArgumentTypeError("File must have a .json extension")
         return model_params
-    parser = argparse.ArgumentParser(description="iTS")
+    parser = argparse.ArgumentParser(description="iLocGlob: global vs local models for intermittent time series forecasting")
     parser.add_argument('--dataset_name', '--dataset-name', dest='dataset_name', type=str, choices=['OnlineRetail', 'Auto', 'RAF', 'carparts', 'syph', 'M5', 'crime', 'VN1', 'UCI'], required=True, help='Specify dataset name')
     parser.add_argument('--model', type=str, choices=['deepAR','transformer','informer', 'autoformer', 'patchTST', 'tide', 'feedforward', 'dlinear', 'lightgbm'], required=True, help="Specify model")
     parser.add_argument('--distribution_head', type=str, choices=['poisson','negbin', 'tweedie', 'hsnb', 'quantile', 'isqf', 'iqn'], default='tweedie', help="Specify distribution_head, default is 'tweedie'")
@@ -112,6 +112,7 @@ if __name__ == "__main__":
         logger.log(f"Creating tabular datasets")
         train_tabular, valid_tabular, test_tabular = create_tabular(CONFIG, datasets, data_info)
 
+        logger.log(f"Building the model")
         model = model_builder.get_model()
         param_sampler = ParamSampler()
 
@@ -120,19 +121,22 @@ if __name__ == "__main__":
             params = param_sampler.sample()
 
             X_train, y_train = train_tabular
-            model.train(params,
-                        lgb.Dataset(X_train, label=y_train, categorical_feature=[0]),
-                        num_boost_round=params['num_boost_round'])
+            try:
+                model.train(params,
+                        lgb.Dataset(X_train, label=y_train, categorical_feature=[0]))
+                #loss = forward(model, train_tabular, "cpu", config=CONFIG)
+                val_loss = []
+                for i, tab in enumerate(valid_tabular):
+                    logger.log("Timestep " + str(i+1) + " out of " + str(data_info['h']))
+                    loss = forward(model, tab, "cpu", config=CONFIG)
+                    val_loss.append(loss)
+                history['train_loss'].append(None)
+                history['val_loss'].append(np.mean(val_loss))
+                param_sampler.update(np.mean(val_loss), params, model, iter_num=epoch)
+                logger.log_iter(epoch, params, np.mean(val_loss), param_sampler.best_iter)
 
-            # Validation loss
-            loss = forward(model, valid_tabular, "cpu", config=CONFIG)
-            history['train_loss'].append(None)
-            history['val_loss'].append(loss)
-            param_sampler.update(loss, params, model, iter_num=epoch)
-            logger.log_iter(epoch, params, loss, param_sampler.best_iter)
-
-        # Print/log best params and best iter
-        logger.log_best(param_sampler.best_val_loss, param_sampler.best_params, param_sampler.best_iter)
+            except Exception as e:
+                logger.log(f"Error occurred at iteration {epoch}: {e}")
 
         # Save the best LightGBMLSS model's booster
         if param_sampler.best_model is not None and hasattr(param_sampler.best_model, 'booster'):# and param_sampler.best_model.booster is not None:
@@ -221,11 +225,10 @@ if __name__ == "__main__":
 
     if model_builder.model == "lightgbm":
         model = param_sampler.best_model # TODO: load the best model from saved version...
-        X_test, _ = test_tabular
-        N = X_test.shape[0] // data_info['h']
-        for i in range(data_info['h']):
+        for i, tab in enumerate(test_tabular):
             logger.log("Timestep " + str(i+1) + " out of " + str(data_info['h']))
-            forecast_samples = model.predict(X_test[i*N:(i+1)*N], pred_type="samples", n_samples=10000).values
+            X_test, _ = tab
+            forecast_samples = model.predict(X_test, pred_type="samples", n_samples=10000).values
             mean_forecasts.append(forecast_samples.mean(axis=1))
             quantile_forecasts.append(np.quantile(forecast_samples, qlevels, axis=1))
         mean_forecasts = np.vstack(mean_forecasts).T
@@ -292,4 +295,4 @@ if __name__ == "__main__":
 
     # to debug:
     # --dataset_name carparts --model lightgbm --distribution_head negbin --num_epochs 4
-    # --dataset_name carparts --model tide --distribution_head negbin --scaling mean-demand --cpu True --num_epochs 3
+    # --dataset_name carparts --model autoformer --distribution_head negbin --scaling mean-demand --cpu True --num_epochs 3

@@ -47,6 +47,7 @@ DATASETS_METADATA = {
     'carparts'      : {'N': 2509,   'len': 51,    'h': 6,     'freq' : 'M', 'start' : '1998-01-01', 'w' : 2},
     'UCI'           : {'N': 1191,   'len': 90,    'h': 14,    'freq' : 'D', 'start' : '2011-09-11', 'w' : 2},
     'M5'            : {'N': 30490,  'len': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4},
+    'VN1'           : {'N': 15053,  'len': 183,   'h': 13,    'freq' : 'W', 'start' : '2020-07-06', 'w' : 4}
 }
 
 ### Import raw data from disk
@@ -362,6 +363,8 @@ def create_dataloaders(config, datasets, data_info, batch_size=128, num_batches_
                 'num_feat_dynamic_real' : 'num_dynamic_real_features',
                 'lags_seq' : 'lags_sequence'
             }.get(k, k): v for k, v in config.items()}
+    else:
+        config = config.__dict__
     
     train_dataloader = create_train_dataloader(config=config, 
                                                freq=data_info['freq'], 
@@ -421,8 +424,8 @@ def create_tabular(config, datasets, data_info, train_tab_len = None):
             X, 
             np.array([batch['future_time_features'][i, j, -1].numpy().item() for i, j in enumerate(tab_indices)]).reshape(train_tab_len, -1), 
             tab_indices.reshape(train_tab_len, 1)
-            ], axis=1)
-        y = np.array([batch['future_values'][i, j].numpy().item() for i, j in enumerate(tab_indices)])
+            ], axis=1, dtype=np.float32)
+        y = np.array([batch['future_values'][i, j].numpy().item() for i, j in enumerate(tab_indices)]).astype(np.float32)
 
     train_tabular = (X, y)#lgb.Dataset(X, label=y, categorical_feature=[0])
 
@@ -437,20 +440,29 @@ def create_tabular(config, datasets, data_info, train_tab_len = None):
             batch['past_values'][:, -config['context_length']:].numpy(),
             batch['past_time_features'][:, -config['context_length']:, -1].numpy(),
         ], axis=1)
+    X_list, y_list = [], []
 
     if forecasts == "autoregressive":
-        X = np.concatenate([X, batch['future_time_features'][:, 0, -1].numpy().reshape(-1, 1)], axis=1)
-        y = batch['future_target'][:, 0].numpy()
+        X_list.append(np.concatenate([X, batch['future_time_features'][:, 0, -1].numpy().reshape(-1, 1)], axis=1))
+        y_list.append(batch['future_target'][:, 0].numpy().astype(np.float32))
 
     if forecasts == "multitarget":
-        X = np.concatenate([
-            np.concatenate([X]*data_info['h'], axis=0),
-            np.repeat(batch['future_time_features'][0, :, -1].numpy(), len(datasets['train'])).reshape(-1, 1),
-            np.repeat(np.arange(data_info['h']), len(datasets['train'])).reshape(-1, 1),
-            ], axis=1)    
-        y = np.concatenate([batch['future_values'][:, i].numpy() for i in range(data_info['h'])])
+        for i in range(data_info['h']):
+            X_list.append(
+                np.concatenate([
+                    X, 
+                    batch['future_time_features'][:, i, -1].numpy().reshape(-1, 1), 
+                    np.full((len(datasets['valid']), 1), i)
+                ], axis=1, dtype=np.float32))
+            y_list.append(batch['future_values'][:, i].numpy().astype(np.float32)) 
+        # X = np.concatenate([
+        #     np.concatenate([X]*data_info['h'], axis=0),
+        #     np.repeat(batch['future_time_features'][0, :, -1].numpy(), len(datasets['train'])).reshape(-1, 1),
+        #     np.repeat(np.arange(data_info['h']), len(datasets['train'])).reshape(-1, 1),
+        #     ], axis=1)    
+        # y = np.concatenate([batch['future_values'][:, i].numpy() for i in range(data_info['h'])])
 
-    valid_tabular = (X, y)
+    valid_tabular = [(X, y) for X, y in zip(X_list, y_list)]
 
     test_dataloader = create_test_dataloader(config=config, 
                                              freq=data_info['freq'], 
@@ -462,17 +474,26 @@ def create_tabular(config, datasets, data_info, train_tab_len = None):
             batch['past_values'][:, -config['context_length']:].numpy(),
             batch['past_time_features'][:, -config['context_length']:, -1].numpy(),
         ], axis=1)
+    X_list = []
 
     if forecasts == "autoregressive":
-        X = np.concatenate([X, batch['future_time_features'][:, 0, -1].numpy().reshape(-1, 1)], axis=1)
+        X_list.append(np.concatenate([X, batch['future_time_features'][:, 0, -1].numpy().reshape(-1, 1)], axis=1))
 
     if forecasts == "multitarget":
-        X = np.concatenate([
-            np.concatenate([X]*data_info['h'], axis=0),
-            np.repeat(batch['future_time_features'][0, :, -1].numpy(), len(datasets['test'])).reshape(-1, 1),
-            np.repeat(np.arange(data_info['h']), len(datasets['test'])).reshape(-1, 1),
-            ], axis=1)
+        for i in range(data_info['h']):
+            X_list.append(
+                np.concatenate([
+                    X, 
+                    batch['future_time_features'][:, i, -1].numpy().reshape(-1, 1), 
+                    np.full((len(datasets['test']), 1), i)
+                ], axis=1, dtype=np.float32))
+
+        # X = np.concatenate([
+        #     np.concatenate([X]*data_info['h'], axis=0),
+        #     np.repeat(batch['future_time_features'][0, :, -1].numpy(), len(datasets['test'])).reshape(-1, 1),
+        #     np.repeat(np.arange(data_info['h']), len(datasets['test'])).reshape(-1, 1),
+        #     ], axis=1)
         
-    test_tabular = (X, None)
+    test_tabular = [(X, None) for X in X_list]
 
     return (train_tabular, valid_tabular, test_tabular)
