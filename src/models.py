@@ -671,15 +671,16 @@ class ParamSampler():
 
     def __init__(self, param_space=None):
         self.param_space = param_space or {
-            "learning_rate": ("float", {"low": 1e-4, "high": 0.1, "log": True}),
-            "max_depth": ("int", {"low": 1, "high": 10, "log": False}),
+            "learning_rate": ("float", {"low": 5e-3, "high": 0.1, "log": True}),
+            "max_depth": ("int", {"low": 4, "high": 10, "log": False}),
             "num_leaves": ("int", {"low": 2, "high": 200, "log": True}),
             "min_data_in_leaf": ("int", {"low": 1, "high": 64, "log": True}),
             "min_gain_to_split": ("float", {"low": 1e-8, "high": 40.0, "log": False}),
-            "min_sum_hessian_in_leaf": ("float", {"low": 1e-8, "high": 40.0, "log": True}),
             "subsample": ("float", {"low": 0.7, "high": 1.0, "log": False}),
             "feature_fraction": ("float", {"low": 0.4, "high": 1.0, "log": False}),
-            "num_boost_round": ("int", {"low": 20, "high": 1000, "log": False}),
+            "num_boost_round": ("int", {"low": 50, "high": 1000, "log": False}),
+            "bagging_freq": ("int", {"low": 1, "high": 1, "log": False}),
+            "extra_trees": ("categorical", [False, True]),
             "boosting": ("categorical", ["gbdt"]),
             "device": ("categorical", ["cpu"]),
             "num_threads": ("none", [1]),
@@ -956,7 +957,7 @@ class LocalModel:
                                 season <- ((t - 1) %% period_len) + 1
                                 past_season <- ifelse(season == 1, period_len, season - 1)
                                 xi[past_season] <- xi[past_season] + k * score
-                                xi[-past_season] <- xi[-past_season] - k / (period_len - 1) * score
+                                xi[-past_season] <- xi[-past_season] - (k / (period_len - 1)) * score
                                 gamma <- xi[season]
                                 f[t] <- exp(psi + gamma)
                             }} else {{

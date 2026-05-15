@@ -46,8 +46,7 @@ DATASETS_METADATA = {
     'RAF'           : {'N': 5000,   'len': 84,    'h': 12,    'freq' : 'M', 'start' : '1996-01-01', 'w' : 3},
     'carparts'      : {'N': 2509,   'len': 51,    'h': 6,     'freq' : 'M', 'start' : '1998-01-01', 'w' : 2},
     'UCI'           : {'N': 1191,   'len': 90,    'h': 14,    'freq' : 'D', 'start' : '2011-09-11', 'w' : 2},
-    'M5'            : {'N': 30490,  'len': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4},
-    'VN1'           : {'N': 15053,  'len': 183,   'h': 13,    'freq' : 'W', 'start' : '2020-07-06', 'w' : 4}
+    'M5'            : {'N': 30490,  'len': 1969,  'h': 28,    'freq' : 'D', 'start' : '2011-01-29', 'w' : 4}
 }
 
 ### Import raw data from disk
@@ -398,7 +397,7 @@ def create_tabular(config, datasets, data_info, train_tab_len = None):
         config = config.__dict__
 
     forecasts = "multitarget"
-    train_tab_len = 10 * len(datasets['train']) if train_tab_len is None else train_tab_len
+    train_tab_len = 20 * len(datasets['train']) if train_tab_len is None else train_tab_len
     
     train_dataloader = create_train_dataloader(config=config, 
                                                freq=data_info['freq'], 
