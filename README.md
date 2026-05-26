@@ -1,9 +1,9 @@
 # Intermittent time series forecasting: local vs global models
-Stefano Damato, Nicoló Rubattu, Dario Azzimonti, Giorgio Corani
+[Authors]
 
 ## Overview
 
-This is the official repository fo the paper "Intermittent time series forecasting: local vs global models", authored by S. Damato, N. Rubattu, D. Azzimonti and G. Corani, currently under review at the Data Mining and Knowledge Discovery track of ECMLPKDD2026.
+This is the official repository fo the paper "Intermittent time series forecasting: local vs global models", authored by [Authors], currently under review at the Journal of the Operational Research Society.
 
 The repository is organised as follows:
 
@@ -28,7 +28,7 @@ The repository is organised as follows:
 │   ├── local.py
 │   ├── measures.py
 │   ├── models.py
-│   ├── results.ipynb (#TODO)
+│   ├── results.ipynb
 │   └── visual.py
 └── trained_models/
 ```
@@ -124,16 +124,8 @@ The `trained_models/` folder is left empty; but experiments run with scripts abo
 To acknowledge our work, please cite the following preprint:
 
 ```
-@misc{damato2026intermittent,
-      title={Intermittent time series forecasting: local vs global models}, 
-      author={Stefano Damato and Nicolò Rubattu and Dario Azzimonti and Giorgio Corani},
-      year={2026},
-      eprint={2601.14031},
-      archivePrefix={arXiv},
-      primaryClass={stat.ML},
-      url={https://arxiv.org/abs/2601.14031}, 
-}
+#HIDDEN
 ```
 
-For any questions, contact Stefano Damato (`stefano.damato@supsi.ch`).
+For any questions, contact #HIDDEN.
 For bug and issues reporting, use the GitHub issue tracker of the repository.
