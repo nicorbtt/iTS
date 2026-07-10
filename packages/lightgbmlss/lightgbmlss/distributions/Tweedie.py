@@ -85,7 +85,7 @@ class Tweedie(ExponentialFamily):
             def get_log_W_max(alpha, j, pi):
                 return (j * (1 - alpha) - torch.log(2 * pi) - 0.5 * torch.log(-alpha) - torch.log(j))
 
-            pi = torch.tensor(math.pi, device=y.device)
+            pi = torch.tensor(math.pi, dtype=y.dtype, device=y.device)
             alpha = get_alpha(rho)
             log_z = get_log_z(y, phi, rho)
         
@@ -95,6 +95,8 @@ class Tweedie(ExponentialFamily):
             j_max = get_jmax(y, phi, rho)
             constant_log_W = log_z + (1 - alpha) + alpha * torch.log(-alpha)
             log_W_max = get_log_W_max(alpha, j_max.round(), pi)
+            if torch.any(torch.isinf(log_W_max)):
+                raise OverflowError("log(W_max) growing towards infinity")
 
             j = max(torch.tensor(1, device=y.device), j_max.max().round())
             log_W = get_log_W(alpha, j, constant_log_W, pi)
@@ -115,7 +117,9 @@ class Tweedie(ExponentialFamily):
             j_L = j.item()
         
             j = torch.arange(j_L, j_U + 1, device=y.device)
-            j_2dim = torch.tile(j.float(), (log_z.shape[0], 1)).to(torch.float32)
+            if len(j) > 1e6:
+                raise(OverflowError("Too many terms in the summation for log(W)."))
+            j_2dim = torch.tile(j.to(dtype=log_z.dtype), (log_z.shape[0], 1))
             log_W = j_2dim * log_z[:, None] - torch.special.gammaln(j.float() + 1) - torch.special.gammaln(-alpha[:, None] * j.float())
 
             max_log_W = torch.max(log_W, axis=1).values
@@ -126,7 +130,7 @@ class Tweedie(ExponentialFamily):
             
         value, mu, phi, rho = broadcast_all(value, self.mu, self.phi, self.rho)
 
-        log_p = torch.full(value.shape, torch.nan, device=value.device)
+        log_p = torch.full(value.shape, torch.nan, dtype=value.dtype, device=value.device)
 
         zeros = value == 0
         non_zeros = ~zeros
@@ -231,9 +235,20 @@ class TweedieDistribution(DistributionClass):
         else:
             raise ValueError(
                 "Invalid response function for mu. Please choose from 'exp' or 'softplus'.")
+        
+        # Response function for phi: maps to (0, inf)
+        def exp_corrected_fn(x):
+            """Exponential function with correction to avoid overflow"""
+            eps = 1e-3  # small epsilon to prevent exact zero or infinity
+            return torch.exp(x) + eps
+        def softplus_corrected_fn(x):
+            """Softplus function with correction to avoid exact zero"""
+            eps = 1e-3  # small epsilon to prevent exact zero
+            return F.softplus(x) + eps
+
 
         # Specify Response Functions for phi
-        response_functions_phi = {"exp": exp_fn, "softplus": softplus_fn}
+        response_functions_phi = {"exp": exp_corrected_fn, "softplus": softplus_corrected_fn}
         if response_fn_phi in response_functions_phi:
             response_fn_phi = response_functions_phi[response_fn_phi]
         else:
@@ -241,11 +256,12 @@ class TweedieDistribution(DistributionClass):
                 "Invalid response function for phi. Please choose from 'exp' or 'softplus'.")
 
         # Response function for rho: maps to [1, 2]
-        def sigmoid_rho_fn(x):
+        def sigmoid_rho_corrected_fn(x):
             """Transform from R to [1, 2] interval using sigmoid"""
-            return 1.0 + torch.sigmoid(x)
+            eps = 1e-3  # small epsilon to avoid exact 1 or 2
+            return 1.0 + eps + torch.sigmoid(x) * (1.0 - 2 * eps)
         
-        response_functions_rho = {"sigmoid_rho": sigmoid_rho_fn}
+        response_functions_rho = {"sigmoid_rho": sigmoid_rho_corrected_fn}
         if response_fn_rho in response_functions_rho:
             response_fn_rho = response_functions_rho[response_fn_rho]
         else:

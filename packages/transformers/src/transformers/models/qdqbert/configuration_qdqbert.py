@@ -20,18 +20,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/config.json",
-    # QDQBERT models can be loaded from any BERT checkpoint, available at https://huggingface.co/models?filter=bert
-}
-
 
 class QDQBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`QDQBertModel`]. It is used to instantiate an
     QDQBERT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the BERT
-    [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
+    [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -76,10 +71,10 @@ class QDQBertConfig(PretrainedConfig):
     ```python
     >>> from transformers import QDQBertModel, QDQBertConfig
 
-    >>> # Initializing a QDQBERT bert-base-uncased style configuration
+    >>> # Initializing a QDQBERT google-bert/bert-base-uncased style configuration
     >>> configuration = QDQBertConfig()
 
-    >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> # Initializing a model from the google-bert/bert-base-uncased style configuration
     >>> model = QDQBertModel(configuration)
 
     >>> # Accessing the model configuration

@@ -51,7 +51,6 @@ if is_torch_available():
         MT5ForTokenClassification,
         MT5Model,
     )
-    from transformers.models.mt5.modeling_mt5 import MT5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 # Copied from tests.models.t5.test_modeling_t5.T5ModelTester with T5->MT5
@@ -104,7 +103,7 @@ class MT5ModelTester:
         self.decoder_layers = decoder_layers
 
     def get_large_model_config(self):
-        return MT5Config.from_pretrained("t5-base")
+        return MT5Config.from_pretrained("google-t5/t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
@@ -546,7 +545,7 @@ class MT5ModelTester:
 
 
 @require_torch
-# Copied from tests.models.t5.test_modeling_t5.T5ModelTest with T5->MT5
+# Copied from tests.models.t5.test_modeling_t5.T5ModelTest with T5->MT5, google-t5/t5-small->google/mt5-small
 class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MT5Model, MT5ForConditionalGeneration, MT5ForSequenceClassification, MT5ForQuestionAnswering)
@@ -835,9 +834,9 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in MT5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MT5Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/mt5-small"
+        model = MT5Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
@@ -940,7 +939,7 @@ class MT5EncoderOnlyModelTester:
         self.is_training = is_training
 
     def get_large_model_config(self):
-        return MT5Config.from_pretrained("t5-base")
+        return MT5Config.from_pretrained("google-t5/t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)

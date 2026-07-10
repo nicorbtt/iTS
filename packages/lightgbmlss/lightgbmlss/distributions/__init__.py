@@ -19,6 +19,7 @@ from . import Cauchy
 from . import LogNormal
 from . import ZIPoisson
 from . import ZINB
+from . import HurdleShiftedNegativeBinomial
 from . import ZAGamma
 from . import ZABeta
 from . import ZALN

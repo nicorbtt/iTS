@@ -23,6 +23,7 @@ lightgbmlss/distributions/Expectile.py
 lightgbmlss/distributions/Gamma.py
 lightgbmlss/distributions/Gaussian.py
 lightgbmlss/distributions/Gumbel.py
+lightgbmlss/distributions/HurdleShiftedNegativeBinomial.py
 lightgbmlss/distributions/Laplace.py
 lightgbmlss/distributions/LogNormal.py
 lightgbmlss/distributions/Logistic.py

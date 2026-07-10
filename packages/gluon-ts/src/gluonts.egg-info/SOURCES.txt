@@ -373,6 +373,8 @@ src/gluonts/torch/distributions/binned_uniforms.py
 src/gluonts/torch/distributions/discrete_distribution.py
 src/gluonts/torch/distributions/distribution_output.py
 src/gluonts/torch/distributions/generalized_pareto.py
+src/gluonts/torch/distributions/hurdle_shifted_negative_binomial.py
+src/gluonts/torch/distributions/hurdle_shifted_poisson.py
 src/gluonts/torch/distributions/implicit_quantile_network.py
 src/gluonts/torch/distributions/isqf.py
 src/gluonts/torch/distributions/negative_binomial.py
@@ -383,8 +385,6 @@ src/gluonts/torch/distributions/spliced_binned_pareto.py
 src/gluonts/torch/distributions/studentT.py
 src/gluonts/torch/distributions/truncated_normal.py
 src/gluonts/torch/distributions/tweedie.py
-src/gluonts/torch/distributions/zero_inflated_negative_binomial.py
-src/gluonts/torch/distributions/zero_inflated_poisson.py
 src/gluonts/torch/model/.DS_Store
 src/gluonts/torch/model/__init__.py
 src/gluonts/torch/model/estimator.py

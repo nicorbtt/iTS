@@ -59,14 +59,6 @@ _CHECKPOINT_FOR_DOC = "mt5-small"
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-MT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/mt5-small",
-    "google/mt5-base",
-    "google/mt5-large",
-    "google/mt5-xl",
-    "google/mt5-xxl",
-    # See all mT5 models at https://huggingface.co/models?filter=mt5
-]
 
 PARALLELIZE_DOCSTRING = r"""
     This is an experimental feature and is a subject to change at a moment's notice.
@@ -560,7 +552,7 @@ class MT5Block(nn.Module):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
+                    f"{'2 (key / value) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
                     f"Got {len(past_key_value)} past key / value states"
                 )
 
@@ -1470,8 +1462,8 @@ class MT5Model(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5Model.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
+        >>> model = MT5Model.from_pretrained("google-mt5/mt5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1706,8 +1698,8 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5ForConditionalGeneration.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
+        >>> model = MT5ForConditionalGeneration.from_pretrained("google-mt5/mt5-small")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -2017,8 +2009,8 @@ class MT5EncoderModel(MT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
-        >>> model = MT5EncoderModel.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-mt5/mt5-small")
+        >>> model = MT5EncoderModel.from_pretrained("google-mt5/mt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1

@@ -58,14 +58,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 
-TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "t5-small",
-    "t5-base",
-    "t5-large",
-    "t5-3b",
-    "t5-11b",
-    # See all T5 models at https://huggingface.co/models?filter=t5
-]
 
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
@@ -629,7 +621,7 @@ class TFT5Block(keras.layers.Layer):
             if len(past_key_value) != expected_num_past_key_values:
                 raise ValueError(
                     f"There should be {expected_num_past_key_values} past states. "
-                    f"{'2 (past / key) for cross attention' if expected_num_past_key_values == 4 else ''}. "
+                    f"{'2 (key / value) for cross attention' if expected_num_past_key_values == 4 else ''}. "
                     f"Got {len(past_key_value)} past key / value states"
                 )
 
@@ -1236,8 +1228,8 @@ class TFT5Model(TFT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, TFT5Model
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = TFT5Model.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = TFT5Model.from_pretrained("google-t5/t5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
@@ -1418,8 +1410,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         ```python
         >>> from transformers import AutoTokenizer, TFT5ForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
 
         >>> # training
         >>> inputs = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="tf").input_ids
@@ -1642,8 +1634,8 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, TFT5EncoderModel
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = TFT5EncoderModel.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+        >>> model = TFT5EncoderModel.from_pretrained("google-t5/t5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"

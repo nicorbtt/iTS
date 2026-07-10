@@ -15,7 +15,7 @@ nltk
 pandas
 datasets >= 1.13.3
 fire
-pytest
+pytest<8.0.1
 conllu
 sentencepiece != 0.1.92
 protobuf
@@ -25,3 +25,7 @@ torchaudio
 jiwer
 librosa
 evaluate >= 0.2.0
+timm
+albumentations >= 1.4.5
+torchmetrics
+pycocotools

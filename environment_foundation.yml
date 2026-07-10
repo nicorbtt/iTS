@@ -1,0 +1,29 @@
+name: ilocglob_foundation
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    # Only what src/foundational.py + FoundationModel (in src/models.py) actually need.
+    # Unlike environment.yml, none of this is version-pinned to protect a local fork --
+    # FoundationModel never touches the custom Tweedie/HurdleShifted distribution heads
+    # that live only in packages/gluon-ts and packages/transformers (and models.py lazily
+    # imports those forks only inside ModelConfigBuilder/LocalModel, not at module level),
+    # so pip is free to resolve compatible versions normally, no --no-deps needed anywhere.
+    - numpy
+    - pandas
+    - matplotlib
+    - scipy
+    - datasets
+    - gluonts
+    - transformers
+    - lightgbm
+    - chronos-forecasting
+    - toto-ts
+    - toto-2
+    - timesfm[torch]
+    - tirex-ts
+    # setuptools>=81 dropped pkg_resources, which lightning.fabric (a toto-ts/toto-2
+    # dependency) still imports directly; pin below 81 until that gets fixed upstream.
+    - setuptools<81

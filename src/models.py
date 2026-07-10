@@ -2,41 +2,14 @@ import os
 import logging
 import numpy as np
 import torch
-from gluonts.torch.model.deepar.module import DeepARModel
-from gluonts.torch.model.simple_feedforward.module import SimpleFeedForwardModel
-from gluonts.torch.model.d_linear.module import DLinearModel
-from gluonts.torch.model.patch_tst.module import PatchTSTModel
-from gluonts.torch.model.tide.module import TiDEModel
-from gluonts.time_feature import (
-    time_features_from_frequency_str,
-    TimeFeature,
-    get_lags_for_frequency,
-)
-from gluonts.torch.scaler import MASEScaler, MeanDemandScaler
-from gluonts.torch.distributions import (
-    PoissonOutput, 
-    NegativeBinomialOutput, 
-    TweedieOutput,
-    FixedDispersionTweedieOutput,
-    HurdleShiftedPoissonOutput,
-    HurdleShiftedNegativeBinomialOutput,
-)
-from transformers import (
-    TimeSeriesTransformerConfig, 
-    TimeSeriesTransformerForPrediction, 
-    InformerConfig,
-    InformerForPrediction,
-    AutoformerConfig,
-    AutoformerForPrediction
-)
-from lightgbmlss.model import LightGBMLSS
-from lightgbmlss.distributions.NegativeBinomial import NegativeBinomial
-from lightgbmlss.distributions.Tweedie import TweedieDistribution
-from lightgbmlss.distributions.HurdleShiftedNegativeBinomial import HurdleShiftedNegativeBinomial
 
 torch.set_num_threads(1)
 
-from tweediegp.intermittent_gp import intermittentGP
+# NOTE: gluonts/transformers/lightgbmlss/tweediegp are NOT imported at module level.
+# They're only needed by ModelConfigBuilder/LocalModel (global/local models, which rely
+# on this project's forked distribution heads); FoundationModel needs none of them. Each
+# is imported lazily where used instead, so `from models import FoundationModel` works in
+# any environment, including ones without these forks installed (e.g. environment_foundation.yml).
 
 ### Configuration dictionary
 class ModelConfigBuilder:
@@ -97,9 +70,20 @@ class ModelConfigBuilder:
         self.params = None
 
     def build(self, data_info, **kwargs) -> None:
+        from gluonts.time_feature import time_features_from_frequency_str, get_lags_for_frequency
+        from gluonts.torch.distributions import (
+            PoissonOutput,
+            NegativeBinomialOutput,
+            TweedieOutput,
+            FixedDispersionTweedieOutput,
+            HurdleShiftedPoissonOutput,
+            HurdleShiftedNegativeBinomialOutput,
+        )
+        from transformers import TimeSeriesTransformerConfig, InformerConfig, AutoformerConfig
+
         def _check(key, default_value):
             return kwargs[key] if key in kwargs else default_value
-        
+
         lags_sequence = get_lags_for_frequency(data_info['freq'] if data_info['freq'] != "M" else "ME") if not 'lag_sequence' in kwargs else []
         self.time_features = time_features_from_frequency_str(data_info['freq'] if data_info['freq'] != "M" else "ME") if not 'time_features' in kwargs else []
         
@@ -420,7 +404,18 @@ class ModelConfigBuilder:
 
     ### Create Model
     def get_model(self):
-        if self.model == "deepAR" : 
+        from gluonts.torch.model.deepar.module import DeepARModel
+        from gluonts.torch.model.simple_feedforward.module import SimpleFeedForwardModel
+        from gluonts.torch.model.d_linear.module import DLinearModel
+        from gluonts.torch.model.patch_tst.module import PatchTSTModel
+        from gluonts.torch.model.tide.module import TiDEModel
+        from transformers import TimeSeriesTransformerForPrediction, InformerForPrediction, AutoformerForPrediction
+        from lightgbmlss.model import LightGBMLSS
+        from lightgbmlss.distributions.NegativeBinomial import NegativeBinomial
+        from lightgbmlss.distributions.Tweedie import TweedieDistribution
+        from lightgbmlss.distributions.HurdleShiftedNegativeBinomial import HurdleShiftedNegativeBinomial
+
+        if self.model == "deepAR" :
             tmp = self.params['num_feat_dynamic_real'] + len(self.time_features) + 1
             return(DeepARModel(**({**self.params, 'num_feat_dynamic_real': tmp, 'num_feat_static_real':1})))
         if self.model == "transformer" : 
@@ -469,6 +464,14 @@ class ModelConfigBuilder:
 
 ### Forward step
 def forward(model, batch, device, config):
+    from gluonts.torch.model.deepar.module import DeepARModel
+    from gluonts.torch.model.simple_feedforward.module import SimpleFeedForwardModel
+    from gluonts.torch.model.d_linear.module import DLinearModel
+    from gluonts.torch.model.patch_tst.module import PatchTSTModel
+    from gluonts.torch.model.tide.module import TiDEModel
+    from transformers import TimeSeriesTransformerForPrediction, InformerForPrediction, AutoformerForPrediction
+    from lightgbmlss.model import LightGBMLSS
+
     loss = None
     # def _ensure_channel_dim(tensor):
     #     return tensor.unsqueeze(-1) if tensor.dim() == 2 else tensor
@@ -567,6 +570,14 @@ def forward(model, batch, device, config):
 
 ### Generate forecasts
 def predict(model, batch, device, config):
+    from gluonts.torch.model.deepar.module import DeepARModel
+    from gluonts.torch.model.simple_feedforward.module import SimpleFeedForwardModel
+    from gluonts.torch.model.d_linear.module import DLinearModel
+    from gluonts.torch.model.patch_tst.module import PatchTSTModel
+    from gluonts.torch.model.tide.module import TiDEModel
+    from transformers import TimeSeriesTransformerForPrediction, InformerForPrediction, AutoformerForPrediction
+    from lightgbmlss.model import LightGBMLSS
+
     predictions = None
     if isinstance(model, PatchTSTModel):
         distr_args, loc, scale = model(
@@ -727,6 +738,7 @@ class LocalModel:
         self.h = data_info['h']
         self.qlevels = qlevels
         if self.model == "tweedieGP":
+            from tweediegp.intermittent_gp import intermittentGP
             x = torch.arange(data_info['len']).to(torch.float32)
             x =  x/{"D":365, "W":52, "M":12}[data_info['freq']]
             self.train_x = x[:-data_info['h']]
@@ -1096,4 +1108,174 @@ class LocalModel:
             mean_forecast = np.array(gasnb_fore.rx2(1))
             quantile_forecasts = np.array(gasnb_fore.rx2(2))
         return(mean_forecast, quantile_forecasts)
+
+
+class FoundationModel:
+    """Common interface over pretrained (zero-shot) time series foundation models.
+
+    Unlike ModelConfigBuilder/LocalModel above, this class never needs the project's
+    forked gluonts/transformers/lightgbmlss/tweediegp packages -- none of the foundation
+    models use their custom distribution heads. Combined with the lazy imports used
+    elsewhere in this file, `from models import FoundationModel` works in any
+    environment, including ones without these forks installed (see environment_foundation.yml).
+    """
+
+    _SECONDS_PER_STEP = {"D": 86400, "W": 604800, "M": 2629746}
+
+    def __init__(self, model: str, data_info, num_samples=100,
+                 qlevels=[0.5, 0.8, 0.9, 0.95, 0.99], device="cpu") -> None:
+        assert model in ["chronos2", "toto", "toto2", "timesfm", "tirex"]
+        self.model = model
+        self.h = data_info['h']
+        self.freq = data_info['freq']
+        self.qlevels = qlevels
+        self.num_samples = num_samples
+        self.device = device
+
+        if self.model == "chronos2":
+            from chronos import Chronos2Pipeline
+            self.chronos2 = Chronos2Pipeline.from_pretrained(
+                "autogluon/chronos-2-small", device_map=device, torch_dtype=torch.float32
+            )
+
+        if self.model == "timesfm":
+            # device is not configurable here: TimesFM auto-selects cuda if available, else cpu
+            import timesfm
+            self.timesfm = timesfm.TimesFM_2p5_200M_torch.from_pretrained("google/timesfm-2.5-200m-pytorch")
+            self.timesfm.compile(
+                timesfm.ForecastConfig(
+                    max_context=data_info['len'] - data_info['h'],
+                    max_horizon=self.h,
+                    normalize_inputs=True,
+                    use_continuous_quantile_head=True,
+                    force_flip_invariance=True,
+                    infer_is_positive=True,
+                    fix_quantile_crossing=True,
+                )
+            )
+
+        if self.model == "tirex":
+            from tirex import load_model
+            self.tirex = load_model("NX-AI/TiRex", device=device)
+
+        if self.model == "toto2":
+            from toto2 import Toto2Model
+            self.toto2 = Toto2Model.from_pretrained("Datadog/Toto-2.0-4m")
+            self.toto2 = self.toto2.to(device).eval()
+            self.toto2_patch_size = self.toto2.config.patch_size
+
+        if self.model == "toto":
+            from toto.model.toto import Toto
+            from toto.inference.forecaster import TotoForecaster
+            from toto.data.util.dataset import MaskedTimeseries
+            self.MaskedTimeseries = MaskedTimeseries
+            self.toto = Toto.from_pretrained("Datadog/Toto-Open-Base-1.0")
+            self.toto.to(device)
+            self.toto_forecaster = TotoForecaster(self.toto.model)
+            self.seconds_per_step = self._SECONDS_PER_STEP[self.freq]
+
+    def forecast(self, train_y_batch):
+        # train_y_batch: list of B 1-D array-likes (equal length within a dataset)
+        # returns mean_forecast [B,h] and quantile_forecasts [B,h,len(qlevels)]
+        train_y_batch = [np.asarray(y, dtype=np.float32) for y in train_y_batch]
+        mean_forecast, quantile_forecasts = None, None
+
+        if self.model == "chronos2":
+            context = [torch.tensor(y) for y in train_y_batch]
+            quantiles, mean = self.chronos2.predict_quantiles(
+                context, prediction_length=self.h, quantile_levels=self.qlevels
+            )
+            mean_forecast = np.stack([m.numpy().squeeze(0) for m in mean], axis=0)             # [B,h]
+            quantile_forecasts = np.stack([q.numpy().squeeze(0) for q in quantiles], axis=0)   # [B,h,Q]
+
+        if self.model == "timesfm":
+            assert self.qlevels == [0.5, 0.8, 0.9, 0.95, 0.99]
+            point_forecast, quantile_forecast = self.timesfm.forecast(horizon=self.h, inputs=train_y_batch)
+            mean_forecast = point_forecast                              # [B,h]
+            deciles = quantile_forecast[:, :, 1:10]                     # [B,h,9], columns = q0.1..q0.9 in order
+            q05, q08, q09 = deciles[:, :, 4], deciles[:, :, 7], deciles[:, :, 8]
+            # TimesFM only outputs deciles up to q0.9: q0.95/q0.99 are NOT genuine model
+            # output, but a linear extrapolation of the q0.8-q0.9 gap, per user's request
+            gap = q09 - q08
+            q095 = q09 + gap * 0.5
+            q099 = q09 + gap * 0.9
+            quantile_forecasts = np.stack([q05, q08, q09, q095, q099], axis=-1)  # [B,h,5]
+
+        if self.model == "tirex":
+            assert self.qlevels == [0.5, 0.8, 0.9, 0.95, 0.99]
+            context = [torch.tensor(y) for y in train_y_batch]
+            deciles, mean = self.tirex.forecast(context=context, prediction_length=self.h)
+            mean_forecast = mean.numpy()                              # [B,h]
+            deciles = deciles.numpy()                                 # [B,h,9], columns = q0.1..q0.9 in order
+            q05, q08, q09 = deciles[:, :, 4], deciles[:, :, 7], deciles[:, :, 8]
+            # TiRex only outputs deciles up to q0.9: q0.95/q0.99 are NOT genuine model
+            # output, but a linear extrapolation of the q0.8-q0.9 gap, same as timesfm above
+            gap = q09 - q08
+            q095 = q09 + gap * 0.5
+            q099 = q09 + gap * 0.9
+            quantile_forecasts = np.stack([q05, q08, q09, q095, q099], axis=-1)  # [B,h,5]
+
+        if self.model == "toto2":
+            assert self.qlevels == [0.5, 0.8, 0.9, 0.95, 0.99]
+            # Toto2 needs the context length to already be a multiple of patch_size before
+            # the call (it doesn't pad internally) -- left-pad and mask the padding out.
+            # Batching here was verified safe (unlike toto 1.0): forecasting a series alone
+            # vs. alongside unrelated companions gave numerically identical results.
+            T = len(train_y_batch[0])
+            B = len(train_y_batch)
+            pad = (-T) % self.toto2_patch_size
+            padded = np.stack([np.concatenate([np.zeros(pad, dtype=np.float32), y]) for y in train_y_batch])
+            target = torch.tensor(padded, dtype=torch.float32).unsqueeze(1)  # [B,1,T+pad]
+            target_mask = torch.zeros_like(target, dtype=torch.bool)
+            target_mask[:, :, pad:] = True
+            series_ids = torch.zeros(B, 1, dtype=torch.long)
+            quantiles = self.toto2.forecast(
+                {"target": target, "target_mask": target_mask, "series_ids": series_ids},
+                horizon=self.h,
+                decode_block_size=None,
+                has_missing_values=(pad > 0),
+            )  # [9, B, 1, h]
+            quantiles = quantiles[:, :, 0, :].detach().cpu().numpy()  # [9, B, h]
+            q05, q08, q09 = quantiles[4], quantiles[7], quantiles[8]
+            # Toto2 has no separate point-forecast output: use the median as mean_forecast,
+            # same convention as chronos2 (mean == q0.5 there too).
+            mean_forecast = q05
+            # Toto2 only outputs deciles up to q0.9: q0.95/q0.99 are NOT genuine model
+            # output, but a linear extrapolation of the q0.8-q0.9 gap, same as timesfm/tirex above
+            gap = q09 - q08
+            q095 = q09 + gap * 0.5
+            q099 = q09 + gap * 0.9
+            quantile_forecasts = np.stack([q05, q08, q09, q095, q099], axis=-1)  # [B,h,5]
+
+        if self.model == "toto":
+            # NOTE: batching multiple series in one MaskedTimeseries call was verified (empirically,
+            # holding the random seed fixed and averaging over many samples/seeds) to leak information
+            # across unrelated series in the batch -- forecasts for the same series changed depending on
+            # which other series shared the call. So, unlike chronos2/timesfm, each series is forecast
+            # in its own batch-of-1 call here, even though the outer interface still takes/returns a batch.
+            T = len(train_y_batch[0])
+            mean_list, quantile_list = [], []
+            for y in train_y_batch:
+                series = torch.tensor(y).view(1, 1, T).to(self.device)  # [1,1,T]
+                padding_mask = torch.ones_like(series, dtype=torch.bool)
+                id_mask = torch.zeros((1, 1, T), dtype=torch.int32, device=self.device)
+                timestamp_seconds = (torch.arange(T, dtype=torch.int64) * int(self.seconds_per_step)).view(1, 1, T).to(self.device)
+                time_interval_seconds = torch.full((1, 1), int(self.seconds_per_step), dtype=torch.int64).to(self.device)
+                inputs = self.MaskedTimeseries(
+                    series=series,
+                    padding_mask=padding_mask,
+                    id_mask=id_mask,
+                    timestamp_seconds=timestamp_seconds,
+                    time_interval_seconds=time_interval_seconds,
+                )
+                forecast = self.toto_forecaster.forecast(
+                    inputs, prediction_length=self.h, num_samples=self.num_samples, samples_per_batch=self.num_samples
+                )
+                samples = forecast.samples.squeeze(1).squeeze(0).detach().cpu().numpy()  # [h, num_samples]
+                mean_list.append(np.maximum(samples.mean(axis=-1), 0))  # clip: demand is non-negative, occasional extreme samples can pull the sample mean below 0
+                quantile_list.append(np.quantile(samples, self.qlevels, axis=-1).T)
+            mean_forecast = np.stack(mean_list, axis=0)            # [B,h]
+            quantile_forecasts = np.stack(quantile_list, axis=0)   # [B,h,Q]
+
+        return (mean_forecast, quantile_forecasts)
 

@@ -24,16 +24,7 @@ from torch import nn
 from ...activations import ACT2CLS
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...time_series_utils import (
-    FixedDispersionTweedieOutput,
-    NegativeBinomialOutput, 
-    NormalOutput, 
-    PoissonOutput,
-    StudentTOutput,
-    TweedieOutput,
-    TweedieWithPriorsOutput,
-    ZeroInflatedPoissonOutput,
-)
+from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import ModelOutput, add_start_docstrings, logging
 from .configuration_patchtst import PatchTSTConfig
 
@@ -41,11 +32,6 @@ from .configuration_patchtst import PatchTSTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSTConfig"
-
-PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtst-etth1-pretrain",
-    # See all PatchTST models at https://huggingface.co/models?filter=patchtst
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST
@@ -1125,108 +1111,6 @@ class PatchTSTNOPScaler(nn.Module):
         return data, loc, scale
 
 
-class PatchTSTMeanDemandScaler(nn.Module):
-    """
-    Divides data by the mean off the  (positive demand).
-    """
-
-    def __init__(self, config: PatchTSTConfig):
-        super().__init__()
-        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
-        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1.
-        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
-
-    def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Parameters:
-            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                input for Batch norm calculation
-            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                Calculating the scale on the observed indicator.
-        Returns:
-            tuple of `torch.Tensor` of shapes
-                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
-                `(batch_size, 1, num_input_channels)`)
-        """
-        demand_sum = (data * observed_indicator).sum(self.dim, keepdim=True)
-        num_observed = (data * observed_indicator != 0).sum(self.dim, keepdim=True)
-
-        scale = demand_sum / torch.clamp(num_observed, min=1)
-
-        if self.default_scale is None:
-            batch_sum = demand_sum.sum(dim=0)
-            batch_observations = torch.clamp(num_observed.sum(0), min=1)
-            default_scale = torch.squeeze(batch_sum / batch_observations)
-        else:
-            default_scale = self.default_scale * torch.ones_like(scale)
-
-        scale = torch.where(num_observed > 0, scale, default_scale)
-
-        scale = torch.clamp(scale, min=self.minimum_scale)
-        scaled_data = data / scale
-
-        if not self.keepdim:
-            scale = scale.squeeze(dim=self.dim)
-
-        return scaled_data, torch.zeros_like(scale), scale
-    
-
-class PatchTSTMASEScaler(nn.Module):
-    """
-    Scaled the data according to the MASE of previous observations.
-    """
-
-    def __init__(self, config: PatchTSTConfig):
-        super().__init__()
-        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
-        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1.
-        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
-
-    def forward(
-        self, data: torch.Tensor, observed_indicator: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Parameters:
-            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                input for Batch norm calculation
-            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
-                Calculating the scale on the observed indicator.
-        Returns:
-            tuple of `torch.Tensor` of shapes
-                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
-                `(batch_size, 1, num_input_channels)`)
-        """
-        diff = torch.index_select(data*observed_indicator, self.dim, torch.arange(1, data.shape[self.dim])) - torch.index_select(data*observed_indicator, self.dim, torch.arange(data.shape[self.dim] -1))
-        ts_sum = diff.abs().sum(self.dim, keepdim=True)
-        num_observed = observed_indicator.sum(self.dim, keepdim=True) -1
-
-        scale = ts_sum / torch.clamp(num_observed, min=1)
-
-        # If `default_scale` is provided, we use it, otherwise we use the scale
-        # of the batch.
-        if self.default_scale is None:
-            batch_sum = ts_sum.sum(dim=0)
-            batch_observations = torch.clamp(num_observed.sum(0), min=1)
-            default_scale = torch.squeeze(batch_sum / batch_observations)
-        else:
-            default_scale = self.default_scale * torch.ones_like(scale)
-
-        # apply default scale where there are no observations
-        scale = torch.where(num_observed > 0, scale, default_scale)
-
-        # ensure the scale is at least `self.minimum_scale`
-        scale = torch.clamp(scale, min=self.minimum_scale)
-        scaled_data = data / scale
-
-        if not self.keepdim:
-            scale = scale.squeeze(dim=self.dim)
-
-        return scaled_data, torch.zeros_like(scale), scale
-
 class PatchTSTScaler(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
@@ -1234,10 +1118,6 @@ class PatchTSTScaler(nn.Module):
             self.scaler = PatchTSTMeanScaler(config)
         elif config.scaling == "std":
             self.scaler = PatchTSTStdScaler(config)
-        elif config.scaling == "mean demand":
-            self.scaler = PatchTSTMeanDemandScaler(config)
-        elif config.scaling == "MASE":
-            self.scaler = PatchTSTMASEScaler(config)
         else:
             self.scaler = PatchTSTNOPScaler(config)
 
@@ -1774,16 +1654,6 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 self.distribution_output = NormalOutput(dim=config.prediction_length)
             elif config.distribution_output == "negative_binomial":
                 self.distribution_output = NegativeBinomialOutput(dim=config.prediction_length)
-            elif config.distribution_output == "tweedie":
-                self.distribution_output = TweedieOutput()
-            elif config.distribution_output == "fixed_dispersion_tweedie":
-                self.distribution_output = FixedDispersionTweedieOutput()
-            elif config.distribution_output == "tweedie_with_priors":
-                self.distribution_output = TweedieWithPriorsOutput()
-            elif config.distribution_output == "poisson":
-                self.distribution_output = PoissonOutput()
-            elif config.distribution_output == "zero_inflated_poisson":
-                self.distribution_output = ZeroInflatedPoissonOutput()
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 

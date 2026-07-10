@@ -268,7 +268,7 @@ def cached_file(
     filename: str,
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: bool = False,
+    resume_download: Optional[bool] = None,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -299,8 +299,9 @@ def cached_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (`bool`, *optional*, defaults to `False`):
-            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        resume_download:
+            Deprecated and ignored. All downloads are now resumed by default when possible.
+            Will be removed in v5 of Transformers.
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -332,7 +333,7 @@ def cached_file(
 
     ```python
     # Download a model weight from the Hub and cache it.
-    model_weights_file = cached_file("bert-base-uncased", "pytorch_model.bin")
+    model_weights_file = cached_file("google-bert/bert-base-uncased", "pytorch_model.bin")
     ```
     """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
@@ -368,7 +369,7 @@ def cached_file(
             if _raise_exceptions_for_missing_entries:
                 raise EnvironmentError(
                     f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
-                    f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
+                    f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
                 )
             else:
                 return None
@@ -451,7 +452,7 @@ def cached_file(
             revision = "main"
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
-            f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
+            f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
         ) from e
     except HTTPError as err:
         resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
@@ -474,7 +475,7 @@ def get_file_from_repo(
     filename: str,
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: bool = False,
+    resume_download: Optional[bool] = None,
     proxies: Optional[Dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -499,8 +500,9 @@ def get_file_from_repo(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download (`bool`, *optional*, defaults to `False`):
-            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        resume_download:
+            Deprecated and ignored. All downloads are now resumed by default when possible.
+            Will be removed in v5 of Transformers.
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -531,9 +533,9 @@ def get_file_from_repo(
 
     ```python
     # Download a tokenizer configuration from huggingface.co and cache.
-    tokenizer_config = get_file_from_repo("bert-base-uncased", "tokenizer_config.json")
+    tokenizer_config = get_file_from_repo("google-bert/bert-base-uncased", "tokenizer_config.json")
     # This model does not have a tokenizer config so the result will be None.
-    tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
+    tokenizer_config = get_file_from_repo("FacebookAI/xlm-roberta-base", "tokenizer_config.json")
     ```
     """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
@@ -819,7 +821,7 @@ class PushToHubMixin:
         ```python
         from transformers import {object_class}
 
-        {object} = {object_class}.from_pretrained("bert-base-cased")
+        {object} = {object_class}.from_pretrained("google-bert/bert-base-cased")
 
         # Push the {object} to your namespace with the name "my-finetuned-bert".
         {object}.push_to_hub("my-finetuned-bert")
@@ -977,7 +979,7 @@ def get_checkpoint_shard_files(
     cache_dir=None,
     force_download=False,
     proxies=None,
-    resume_download=False,
+    resume_download=None,
     local_files_only=False,
     token=None,
     user_agent=None,

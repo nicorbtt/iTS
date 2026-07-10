@@ -10,7 +10,6 @@ dependencies:
   - r-base
   - r-nloptr
   - r-forecast
-  - r-smooth
   - rpy2
   - pip:
     - torchvision
@@ -29,7 +28,44 @@ dependencies:
     - datasets
     - lightning
     - ujson
+    - statsmodels
     - -e ./packages/gluon-ts
     - -e ./packages/transformers
     - -e ./packages/tweediegp
     - -e ./packages/lightgbmlss
+    # --- runtime deps needed by chronos-forecasting / toto-ts (src/foundational.py) ---
+    # safe to install normally: none of these conflict with the pins/forks above
+    - einops>=0.7.0,<1
+    - jaxtyping>=0.2.24,<0.3
+    - tensorboard
+    - scikit-learn
+    - rotary-embedding-torch
+    - beartype
+    - dill
+    - boto3
+    - aioboto3
+    # timesfm (src/foundational.py): unlike chronos-forecasting/toto-ts below, this one
+    # is safe to install normally here. It only requires torch>=2.0.0 (satisfied by the
+    # torch==2.2.0 pin above) and numpy/huggingface_hub/safetensors -- no transformers,
+    # no gluonts, so it never touches the forks.
+    - timesfm[torch]
+    # tirex-ts (src/foundational.py): also safe to install normally -- its core deps are
+    # torch (no version constraint at all), huggingface-hub, numpy, scikit-learn. No
+    # transformers, no gluonts. Do NOT install the [cuda]/[all] extras (they pull in
+    # `xlstm`+`ninja` for GPU kernels, not needed for CPU inference).
+    - tirex-ts
+    # chronos-forecasting and toto-ts themselves are installed separately, NOT here:
+    # both pin newer torch/transformers (and toto also pins gluonts) than this repo's
+    # torch==2.2.0 and the local editable forks at packages/gluon-ts and
+    # packages/transformers. A normal `pip install` of either would try to replace
+    # those forks. After creating/updating this environment, run:
+    #     pip install --no-deps chronos-forecasting
+    #     pip install --no-deps toto-ts
+    # then `pip install -e ./packages/gluon-ts -e ./packages/transformers` again to make
+    # sure the forks are still the active install, and `pip check` to see what --no-deps
+    # left unresolved. --no-deps only protects the forks at *install* time; it does not
+    # guarantee chronos/toto's internals actually work against this repo's older torch/
+    # transformers at *runtime* (toto in particular was tested against torch==2.7.0 and
+    # transformers==4.52.1, five-plus minor versions ahead) -- test both, e.g.
+    # `python -c "from chronos import BaseChronosPipeline"`, before trusting
+    # src/foundational.py's output.
